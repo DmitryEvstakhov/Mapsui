@@ -5,7 +5,6 @@ using Mapsui.Rendering.Skia.Cache;
 using Mapsui.Rendering.Skia.Extensions;
 using Mapsui.Styles;
 using NetTopologySuite.Geometries;
-using NetTopologySuite.GeometriesGraph;
 using SkiaSharp;
 
 namespace Mapsui.Rendering.Skia;
