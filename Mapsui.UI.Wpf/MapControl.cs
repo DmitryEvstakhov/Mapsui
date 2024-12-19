@@ -5,12 +5,14 @@ using Mapsui.Utilities;
 using SkiaSharp.Views.Desktop;
 using SkiaSharp.Views.WPF;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using Mapsui.Layers;
 
 namespace Mapsui.UI.Wpf;
 
@@ -59,6 +61,9 @@ public partial class MapControl : Grid, IMapControl, IDisposable
         ManipulationCompleted += OnManipulationCompleted;
         ManipulationInertiaStarting += OnManipulationInertiaStarting;
 
+        MouseDown += MapControl_MouseDown;
+        MouseUp += MapControl_MouseUp;
+
         Loaded += MapControlLoaded;
 
         SizeChanged += MapControlSizeChanged;
@@ -68,6 +73,94 @@ public partial class MapControl : Grid, IMapControl, IDisposable
         SkiaCanvas.Visibility = Visibility.Visible;
         RefreshGraphics();
     }
+
+    private void MapControl_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (System.Configuration.ConfigurationManager.AppSettings.Get("MapMoveMouseButton") == "Middle")
+        {
+            if (e.ChangedButton == MouseButton.Middle && e.ButtonState == MouseButtonState.Released)
+            {
+                FixMouseUpPosition(e);
+            }
+        }
+    }
+
+    private void FixMouseUpPosition(MouseButtonEventArgs e)
+    {
+        var mousePosition = e.GetPosition(this).ToMapsui();
+
+        if (_previousMousePosition != null)
+        {
+            if (IsInBoxZoomMode())
+            {
+                var previous = Map.Navigator.Viewport.ScreenToWorld(_previousMousePosition.X, _previousMousePosition.Y);
+                var current = Map.Navigator.Viewport.ScreenToWorld(mousePosition.X, mousePosition.Y);
+                ZoomToBox(previous, current);
+            }
+            else if (_pointerDownPosition != null && IsClick(mousePosition, _pointerDownPosition))
+            {
+                //HandleFeatureInfo(e);
+                OnInfo(CreateMapInfoEventArgs(mousePosition, _pointerDownPosition, e.ClickCount));
+            }
+        }
+
+        RefreshData();
+        _mouseDown = false;
+
+        double velocityX;
+        double velocityY;
+
+        (velocityX, velocityY) = _flingTracker.CalcVelocity(1, DateTime.Now.Ticks);
+
+        if (Math.Abs(velocityX) > 200 || Math.Abs(velocityY) > 200)
+        {
+            // This was the last finger on screen, so this is a fling
+            e.Handled = OnFlinged(velocityX, velocityY);
+        }
+        _flingTracker.RemoveId(1);
+
+        _previousMousePosition = new MPoint();
+        ReleaseMouseCapture();
+    }
+
+    private void MapControl_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (System.Configuration.ConfigurationManager.AppSettings.Get("MapMoveMouseButton") == "Middle")
+        {
+            if (e.ChangedButton == MouseButton.Middle && e.ButtonState == MouseButtonState.Pressed)
+            {
+                FixMouseDownPosition(e);
+            }
+        }
+    }
+
+    private void FixMouseDownPosition(MouseButtonEventArgs e)
+    {
+        var touchPosition = e.GetPosition(this).ToMapsui();
+        _previousMousePosition = touchPosition;
+        _pointerDownPosition = touchPosition;
+        _mouseDown = true;
+        _flingTracker.Clear();
+        CaptureMouse();
+    }
+
+    //private void HandleFeatureInfo(MouseButtonEventArgs e)
+    //{
+    //    if (FeatureInfo == null) return; // don't fetch if you the call back is not set.
+
+    //    if (_pointerDownPosition == e.GetPosition(this).ToMapsui())
+    //        foreach (var layer in Map.Layers)
+    //        {
+    //            // ReSharper disable once SuspiciousTypeConversion.Global
+    //            (layer as IFeatureInfo)?.GetFeatureInfo(Map.Navigator.Viewport, _pointerDownPosition.X, _pointerDownPosition.Y,
+    //                OnFeatureInfo);
+    //        }
+    //}
+
+    //private void OnFeatureInfo(IDictionary<string, IEnumerable<IFeature>> features)
+    //{
+    //    FeatureInfo?.Invoke(this, new FeatureInfoEventArgs { FeatureInfo = features });
+    //}
 
     private static Rectangle CreateSelectRectangle()
     {
@@ -145,15 +238,20 @@ public partial class MapControl : Grid, IMapControl, IDisposable
 
     private void MapControlMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        _pointerDownPosition = e.GetPosition(this).ToMapsui();
+        if (System.Configuration.ConfigurationManager.AppSettings.Get("MapMoveMouseButton") != "Middle")
+        {
+            FixMouseDownPosition(e);
+        }
 
-        if (HandleWidgetPointerDown(_pointerDownPosition, true, e.ClickCount, GetShiftPressed()))
-            return;
+        //_pointerDownPosition = e.GetPosition(this).ToMapsui();
 
-        _previousMousePosition = _pointerDownPosition;
-        _mouseDown = true;
-        _flingTracker.Clear();
-        CaptureMouse();
+        //if (HandleWidgetPointerDown(_pointerDownPosition, true, e.ClickCount, GetShiftPressed()))
+        //    return;
+
+        //_previousMousePosition = _pointerDownPosition;
+        //_mouseDown = true;
+        //_flingTracker.Clear();
+        //CaptureMouse();
     }
 
     private static bool IsInBoxZoomMode()
@@ -163,46 +261,51 @@ public partial class MapControl : Grid, IMapControl, IDisposable
 
     private void MapControlMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        var mousePosition = e.GetPosition(this).ToMapsui();
-
-        if (HandleWidgetPointerUp(mousePosition, _pointerDownPosition, true, e.ClickCount, GetShiftPressed()))
+        if (System.Configuration.ConfigurationManager.AppSettings.Get("MapMoveMouseButton") != "Middle")
         {
-            _mouseDown = false;
-
-            return;
+            FixMouseUpPosition(e);
         }
 
-        if (_previousMousePosition != null)
-        {
-            if (IsInBoxZoomMode())
-            {
-                var previous = Map.Navigator.Viewport.ScreenToWorld(_previousMousePosition.X, _previousMousePosition.Y);
-                var current = Map.Navigator.Viewport.ScreenToWorld(mousePosition.X, mousePosition.Y);
-                ZoomToBox(previous, current);
-            }
-            else if (_pointerDownPosition != null && IsClick(mousePosition, _pointerDownPosition))
-            {
-                OnInfo(CreateMapInfoEventArgs(mousePosition, _pointerDownPosition, e.ClickCount));
-            }
-        }
+        //var mousePosition = e.GetPosition(this).ToMapsui();
 
-        RefreshData();
-        _mouseDown = false;
+        //if (HandleWidgetPointerUp(mousePosition, _pointerDownPosition, true, e.ClickCount, GetShiftPressed()))
+        //{
+        //    _mouseDown = false;
 
-        double velocityX;
-        double velocityY;
+        //    return;
+        //}
 
-        (velocityX, velocityY) = _flingTracker.CalcVelocity(1, DateTime.Now.Ticks);
+        //if (_previousMousePosition != null)
+        //{
+        //    if (IsInBoxZoomMode())
+        //    {
+        //        var previous = Map.Navigator.Viewport.ScreenToWorld(_previousMousePosition.X, _previousMousePosition.Y);
+        //        var current = Map.Navigator.Viewport.ScreenToWorld(mousePosition.X, mousePosition.Y);
+        //        ZoomToBox(previous, current);
+        //    }
+        //    else if (_pointerDownPosition != null && IsClick(mousePosition, _pointerDownPosition))
+        //    {
+        //        OnInfo(CreateMapInfoEventArgs(mousePosition, _pointerDownPosition, e.ClickCount));
+        //    }
+        //}
 
-        if (Math.Abs(velocityX) > 200 || Math.Abs(velocityY) > 200)
-        {
-            // This was the last finger on screen, so this is a fling
-            e.Handled = OnFlinged(velocityX, velocityY);
-        }
-        _flingTracker.RemoveId(1);
+        //RefreshData();
+        //_mouseDown = false;
 
-        _previousMousePosition = new MPoint();
-        ReleaseMouseCapture();
+        //double velocityX;
+        //double velocityY;
+
+        //(velocityX, velocityY) = _flingTracker.CalcVelocity(1, DateTime.Now.Ticks);
+
+        //if (Math.Abs(velocityX) > 200 || Math.Abs(velocityY) > 200)
+        //{
+        //    // This was the last finger on screen, so this is a fling
+        //    e.Handled = OnFlinged(velocityX, velocityY);
+        //}
+        //_flingTracker.RemoveId(1);
+
+        //_previousMousePosition = new MPoint();
+        //ReleaseMouseCapture();
     }
 
     /// <summary>

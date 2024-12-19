@@ -98,6 +98,11 @@ public interface ILayer : IAnimatable, INotifyPropertyChanged, IDisposable
     bool IsMapInfoLayer { get; set; }
 
     /// <summary>
+    /// Points that this layer is active and can be show on the canvas
+    /// </summary>
+    bool IsActive { get; set; }
+
+    /// <summary>
     /// Event called when the data within the layer has changed allowing
     /// listeners to react to this.
     /// </summary>

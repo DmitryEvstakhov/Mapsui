@@ -54,6 +54,7 @@ public sealed class MapRenderer : IRenderer, IDisposable
     {
         StyleRenderers[typeof(RasterStyle)] = new RasterStyleRenderer();
         StyleRenderers[typeof(VectorStyle)] = new VectorStyleRenderer();
+        StyleRenderers[typeof(ArrowVectorStyle)] = new VectorStyleRenderer();
         StyleRenderers[typeof(LabelStyle)] = new LabelStyleRenderer();
         StyleRenderers[typeof(SymbolStyle)] = new SymbolStyleRenderer();
         StyleRenderers[typeof(CalloutStyle)] = new CalloutStyleRenderer();

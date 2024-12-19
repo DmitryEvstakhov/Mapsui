@@ -174,23 +174,23 @@ public class Map : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// Refresh data of the map and than repaint it
     /// </summary>
-    public void Refresh(ChangeType changeType = ChangeType.Discrete)
+    public void Refresh(ChangeType changeType = ChangeType.Discrete, bool forceUpdate = false)
     {
-        RefreshData(changeType);
+        RefreshData(changeType, forceUpdate);
         RefreshGraphics();
     }
 
     /// <summary>
     /// Refresh data of Map, but don't paint it
     /// </summary>
-    public void RefreshData(ChangeType changeType = ChangeType.Discrete)
+    public void RefreshData(ChangeType changeType = ChangeType.Discrete, bool forceUpdate = false)
     {
         if (Navigator.Viewport.ToExtent() is null)
             return;
         if (Navigator.Viewport.ToExtent().GetArea() <= 0)
             return;
 
-        var fetchInfo = new FetchInfo(Navigator.Viewport.ToSection(), CRS, changeType);
+        var fetchInfo = new FetchInfo(Navigator.Viewport.ToSection(), CRS, changeType, forceUpdate);
         RefreshData(fetchInfo);
     }
 

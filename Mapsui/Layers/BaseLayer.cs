@@ -21,6 +21,7 @@ public abstract class BaseLayer : ILayer
     private IStyle? _style;
     private object? _tag;
     private MRect? _extent;
+    private bool _isActive;
 
     /// <summary>
     /// Creates a BaseLayer without a name
@@ -34,6 +35,7 @@ public abstract class BaseLayer : ILayer
         MaxVisible = double.MaxValue;
         Opacity = 1;
         Id = NextId();
+        IsActive = true;
     }
 
     internal static int NextId()
@@ -171,6 +173,17 @@ public abstract class BaseLayer : ILayer
             _extent = value;
             OnPropertyChanged(nameof(Extent));
             Logger.Log(LogLevel.Debug, $@"Changed Extend on Layer {_name}: {_extent}");
+        }
+    }
+
+    public bool IsActive
+    {
+        get => _isActive;
+        set
+        {
+            if (_isActive == value) return;
+            _isActive = value;
+            OnPropertyChanged(nameof(IsActive));
         }
     }
 
