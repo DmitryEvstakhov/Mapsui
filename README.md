@@ -1,14 +1,17 @@
 ## Mapsui (pronounced map-su-wii)
 
-Mapsui is a map component to use in apps on platforms like MAUI, Avalonia, Uno, WPF and Blazor. For a list of all supported platforms see the table below. The right most column has a link to the guickstart guide.
+Mapsui is a map component for apps built with: MAUI, WPF, Avalonia, Uno, Blazor, WinUI, Windows Forms, Eto, .NET Android and .NET iOS. 
+
+## Quick Start
+Below is a table with the nuget packages for all the supported UI frameworks. The right most column has a link to the guickstart.
 
 ## Samples
-After going through the guickstart guide you could look into the samples. There are online samples in Blazor [here](https://mapsui.com/samples/). They are accompanied by a 'source code' tab. All these samples also work on all other platforms. To see the samples of the other platforms you need to clone the Mapsui project (through the 'code' button on the top right). The sln contains a Samples folder with an app for all supported platforms. Set one of them as started project and run. The accompanying code of the samples can be found [here](https://github.com/Mapsui/Mapsui/tree/main/Samples/Mapsui.Samples.Common/Maps).
+After going through the guickstart you should look into the samples. All samples work the same on all platforms. You can view online samples presented in Blazor [here](https://mapsui.com/samples/). Each sample has an accompaning 'source code' tab you can use to build your own version. 
 
 ## Documentation
 The documentation can be found at [mapsui.com](https://mapsui.com).
 
-## Platform Nugets
+## UI Framework Nugets
 
 | Package | Version  | Downloads | Quickstart Guide |
 | ---------------|:-------------:|:-------------:|:------------------------------------------------------------------------------------:|
@@ -24,6 +27,7 @@ The documentation can be found at [mapsui.com](https://mapsui.com).
 | Mapsui.Android | [![NuGet Status](https://img.shields.io/nuget/v/Mapsui.Android.svg?style=flat)](https://www.nuget.org/packages/Mapsui.Android/) |[![NuGet](https://img.shields.io/nuget/dt/Mapsui.Android.svg)](https://www.nuget.org/packages/Mapsui.Android) |       [Android](https://mapsui.com/documentation/getting-started-android.html)       |
 | Mapsui.iOS     | [![NuGet Status](https://img.shields.io/nuget/v/Mapsui.iOS.svg?style=flat)](https://www.nuget.org/packages/Mapsui.iOS/) |[![NuGet](https://img.shields.io/nuget/dt/Mapsui.iOS.svg)](https://www.nuget.org/packages/Mapsui.iOS) |           [iOS](https://mapsui.com/documentation/getting-started-ios.html)           |
 | Mapsui.Eto     | [![NuGet Status](https://img.shields.io/nuget/v/Mapsui.Eto.svg?style=flat)](https://www.nuget.org/packages/Mapsui.Eto/) |[![NuGet](https://img.shields.io/nuget/dt/Mapsui.Eto.svg)](https://www.nuget.org/packages/Mapsui.Eto) |           [Eto](https://mapsui.com/documentation/getting-started-eto.html)           |
+| Mapsui.WindowsForms | [![NuGet Status](https://img.shields.io/nuget/v/Mapsui.WindowsForms.svg?style=flat)](https://www.nuget.org/packages/Mapsui.WindowsForms/) |[![NuGet](https://img.shields.io/nuget/dt/Mapsui.WindowsForms.svg)](https://www.nuget.org/packages/Mapsui.WindowsForms) | [WindowsForms](https://mapsui.com/v5/#__tabbed_1_10) |
 
 ## Core Nugets
 
@@ -52,7 +56,7 @@ The documentation can be found at [mapsui.com](https://mapsui.com).
 - Use screenshots and capture gif animations for issues that are hard to explain.
 - Create minimal reproducible samples if possible. This speeds up fixing the issue a lot.
 - Make yourself heard. We need to know what you are struggling with. Sure, you need to be respectful but don't be too modest.
-- You can vote on [feature-request issues](https://github.com/Mapsui/Mapsui/issues?q=is%3Aopen+label%3Afeature-request+sort%3Areactions-%2B1-desc) by adding a thumbs up on the first post of the issue.
+- You can vote on [issues](https://github.com/Mapsui/Mapsui/issues?q=is%3Aopen+sort%3Areactions-%2B1-desc) by adding a thumbs up on the first post of the issue.
 - Close an issue if your question is answered.
 
 ## Contributing
@@ -60,6 +64,8 @@ See the [guidelines](http://mapsui.com/documentation/contributors-guidelines.htm
 
 ## Thanks go to
 - The developers of SharpMap from which this project was born.
+- The contributors to [NTS](https://github.com/NetTopologySuite/NetTopologySuite) and [BruTile](https://github.com/BruTile/BruTile), components that we depend on.
+- [SkiaSharp](https://github.com/mono/SkiaSharp) which we use for all our rendering.
 - Our users. Do not underestimate the value of good bug reports and tests.
 - [realinfo](https://github.com/reallinfo) for providing the logo
 - Our fantastic [contributors](https://github.com/Mapsui/Mapsui/graphs/contributors)!

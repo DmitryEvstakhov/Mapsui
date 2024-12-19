@@ -75,7 +75,7 @@ public class GradientTheme : Style, IThemeStyle
     /// properties are linearly interpolated between max and min values.
     /// </summary>
     /// <param name="row">Feature</param>
-    /// <returns><see cref=IStyle">Style</see> calculated by a linear interpolation between the min/max styles</returns>
+    /// <returns>A <see cref="IStyle">Style</see> calculated by a linear interpolation between the min/max styles</returns>
     public IStyle? GetStyle(IFeature row)
     {
         double attr;
@@ -86,11 +86,11 @@ public class GradientTheme : Style, IThemeStyle
 
         return (MinStyle, MaxStyle) switch
         {
-            (LabelStyle minLabelStyle, LabelStyle maxLabelStyle) 
+            (LabelStyle minLabelStyle, LabelStyle maxLabelStyle)
                 => ToInterpolatedLabelStyle(minLabelStyle, maxLabelStyle, attr, this),
-            (SymbolStyle minSymbolStyle, SymbolStyle maxSymbolStyle) 
+            (SymbolStyle minSymbolStyle, SymbolStyle maxSymbolStyle)
                 => ToInterpolatedSymbolStyle(minSymbolStyle, maxSymbolStyle, attr, this),
-            (VectorStyle minVectorStyle, VectorStyle maxVectorStyle) 
+            (VectorStyle minVectorStyle, VectorStyle maxVectorStyle)
                 => ToInterpolatedVectorStyle(minVectorStyle, maxVectorStyle, attr, this),
             _ => throw new NotSupportedException($"Style type '{MinStyle.GetType()}' and/or '{MinStyle.GetType()}' can not be used in the GradientTheme")
         };
@@ -125,7 +125,7 @@ public class GradientTheme : Style, IThemeStyle
 
         var fraction = Fraction(value, instance.Min, instance.Max);
 
-        result.BitmapId = (fraction > 0.5) ? min.BitmapId : max.BitmapId;
+        result.ImageSource = (fraction > 0.5) ? min.ImageSource : max.ImageSource;
         result.SymbolOffset = fraction > 0.5 ? min.SymbolOffset ?? new Offset() : max.SymbolOffset ?? new Offset();
         // We don't interpolate the offset but let it follow the symbol instead
         result.SymbolScale = InterpolateDouble(min.SymbolScale, max.SymbolScale, fraction);
@@ -178,18 +178,16 @@ public class GradientTheme : Style, IThemeStyle
 
     private static double InterpolateDouble(double min, double max, double fraction) => (max - min) * fraction + min;
 
-    private static Brush InterpolateBrush(Brush min, Brush max, double fraction)
-        => new()
-        {
-            Color = InterpolateColor(min.Color ?? Color.Transparent, max.Color ?? Color.Transparent, fraction)
-        };
+    private static Brush InterpolateBrush(Brush min, Brush max, double fraction) => new()
+    {
+        Color = InterpolateColor(min.Color ?? Color.Transparent, max.Color ?? Color.Transparent, fraction)
+    };
 
-    private static Pen InterpolatePen(Pen min, Pen max, double fraction)
-        => new()
-        {
-            Color = InterpolateColor(min.Color, max.Color, fraction),
-            Width = InterpolateDouble(min.Width, max.Width, fraction)
-        };
+    private static Pen InterpolatePen(Pen min, Pen max, double fraction) => new()
+    {
+        Color = InterpolateColor(min.Color, max.Color, fraction),
+        Width = InterpolateDouble(min.Width, max.Width, fraction)
+    };
 
     private static Color InterpolateColor(Color minColor, Color maxColor, double fraction)
     {

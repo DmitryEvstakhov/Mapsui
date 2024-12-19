@@ -1,8 +1,10 @@
 ﻿using System.Diagnostics.CodeAnalysis;
+using Mapsui.Extensions;
 using Mapsui.Samples.Common;
 using Mapsui.Samples.Common.Extensions;
-using Mapsui.Samples.CustomWidget;
+using Mapsui.Samples.Common.Maps.Widgets;
 using Mapsui.UI.Blazor;
+using Mapsui.Widgets.InfoWidgets;
 using Microsoft.AspNetCore.Components;
 
 namespace Mapsui.Samples.Blazor.Pages;
@@ -59,6 +61,7 @@ public partial class Index
     protected override void OnInitialized()
     {
         base.OnInitialized();
+        LoggingWidget.ShowLoggingInMap = ShowLoggingInMap.WhenLoggingWidgetIsEnabled; // To show logging in release mode
         FillComboBoxWithCategories();
     }
 
@@ -70,7 +73,7 @@ public partial class Index
             _render = false;
             FillMap();
             if (_mapControl != null)
-                _mapControl.Renderer.WidgetRenders[typeof(CustomWidget.CustomWidget)] = new CustomWidgetSkiaRenderer();
+                _mapControl.Renderer.WidgetRenders[typeof(CustomWidget)] = new CustomWidgetSkiaRenderer();
         }
     }
 
@@ -108,15 +111,18 @@ public partial class Index
         SampleId = MapSamples.FirstOrDefault()?.Name;
     }
 
-    private async void FillMap()
+    private void FillMap()
     {
-        if (Sample != null && _mapControl != null)
+        Catch.Exceptions(async () =>
         {
-            var sample = Sample;
-            Title = sample.Name;
-            await sample.SetupAsync(_mapControl);
-            _sourceCodeUrl = $@"../codesamples/{sample.GetType().Name}.html";
-        }
+            if (Sample != null && _mapControl != null)
+            {
+                var sample = Sample;
+                Title = sample.Name;
+                await sample.SetupAsync(_mapControl);
+                _sourceCodeUrl = $@"../codesamples/{sample.GetType().Name}.html";
+            }
+        });
     }
 
     public ISampleBase? Sample { get; set; }

@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
+    <TargetFrameworks>net8.0</TargetFrameworks>
 	  <ImplicitUsings>enable</ImplicitUsings>
     <EnableNETAnalyzers>True</EnableNETAnalyzers>
     <DefineConstants>__BLAZOR__</DefineConstants>
@@ -17,6 +17,7 @@
 
 	<ItemGroup>
     <PackageReference Include="SkiaSharp.Views.Blazor" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
     <PackageReference Include="DotNext.Threading" />
     <PackageReference Include="HarfBuzzSharp.NativeAssets.WebAssembly" />
     <PackageReference Include="SkiaSharp.NativeAssets.WebAssembly" />

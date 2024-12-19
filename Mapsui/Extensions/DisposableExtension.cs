@@ -1,8 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 #pragma warning disable IDISP007
 
@@ -27,5 +24,13 @@ public static class DisposableExtension
     {
         var disposable1 = disposable as IDisposable;
         disposable1?.Dispose();
+    }
+
+    public static void DisposeAllIfDisposable<T>(this IEnumerable<T> disposables) where T : class
+    {
+        foreach (var disposable in disposables)
+        {
+            DisposeIfDisposable(disposable);
+        }
     }
 }

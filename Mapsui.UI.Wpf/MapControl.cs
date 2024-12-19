@@ -1,5 +1,5 @@
 using Mapsui.Extensions;
-using Mapsui.UI.Utils;
+using Mapsui.Manipulations;
 using Mapsui.UI.Wpf.Extensions;
 using Mapsui.Utilities;
 using SkiaSharp.Views.Desktop;
@@ -12,32 +12,18 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
-using Mapsui.Layers;
+using MapsuiManipulation = Mapsui.Manipulations.Manipulation;
 
 namespace Mapsui.UI.Wpf;
 
 public partial class MapControl : Grid, IMapControl, IDisposable
 {
-    private readonly Rectangle _selectRectangle = CreateSelectRectangle();
-    private MPoint? _pointerDownPosition;
-    private bool _mouseDown;
-    private MPoint? _previousMousePosition;
-    private readonly FlingTracker _flingTracker = new();
-    private MPoint? _currentMousePosition;
-
-    /// <summary>
-    /// Fling is called, when user release mouse button or lift finger while moving with a certain speed, higher than speed of swipe 
-    /// </summary>
-    public event EventHandler<SwipedEventArgs>? Fling;
+    private readonly ManipulationTracker _manipulationTracker = new();
 
     public MapControl()
     {
-        CommonInitialize();
-        Initialize();
-    }
+        SharedConstructor();
 
-    private void Initialize()
-    {
         _invalidate = () =>
         {
             if (Dispatcher.CheckAccess()) InvalidateCanvas();
@@ -45,28 +31,24 @@ public partial class MapControl : Grid, IMapControl, IDisposable
         };
 
         Children.Add(SkiaCanvas);
-        Children.Add(_selectRectangle);
 
         SkiaCanvas.PaintSurface += SKElementOnPaintSurface;
+        Loaded += MapControlLoaded;
+        SizeChanged += MapControlSizeChanged;
 
-        // Pointer events
         MouseLeftButtonDown += MapControlMouseLeftButtonDown;
         MouseLeftButtonUp += MapControlMouseLeftButtonUp;
+
         MouseMove += MapControlMouseMove;
         MouseLeave += MapControlMouseLeave;
         MouseWheel += MapControlMouseWheel;
-        TouchUp += MapControlTouchUp;
-        ManipulationStarted += OnManipulationStarted;
+
+        ManipulationInertiaStarting += OnManipulationInertiaStarting;
         ManipulationDelta += OnManipulationDelta;
         ManipulationCompleted += OnManipulationCompleted;
-        ManipulationInertiaStarting += OnManipulationInertiaStarting;
 
-        MouseDown += MapControl_MouseDown;
-        MouseUp += MapControl_MouseUp;
-
-        Loaded += MapControlLoaded;
-
-        SizeChanged += MapControlSizeChanged;
+        TouchDown += MapControl_TouchDown;
+        TouchUp += MapControlTouchUp;
 
         IsManipulationEnabled = true;
 
@@ -74,6 +56,7 @@ public partial class MapControl : Grid, IMapControl, IDisposable
         RefreshGraphics();
     }
 
+    private static Rectangle CreateSelectRectangle() => new()
     private void MapControl_MouseUp(object sender, MouseButtonEventArgs e)
     {
         if (System.Configuration.ConfigurationManager.AppSettings.Get("MapMoveMouseButton") == "Middle")
@@ -308,123 +291,43 @@ public partial class MapControl : Grid, IMapControl, IDisposable
         //ReleaseMouseCapture();
     }
 
-    /// <summary>
-    /// Called, when mouse/finger/pen flinged over map
-    /// </summary>
-    /// <param name="velocityX">Velocity in x direction in pixel/second</param>
-    /// <param name="velocityY">Velocity in y direction in pixel/second</param>
-    private bool OnFlinged(double velocityX, double velocityY)
+    private void MapControl_TouchDown(object? sender, TouchEventArgs e)
     {
-        var args = new SwipedEventArgs(velocityX, velocityY);
-
-        Fling?.Invoke(this, args);
-
-        if (args.Handled)
-            return true;
-
-        Map.Navigator.Fling(velocityX, velocityY, 1000);
-
-        return true;
-    }
-
-    private static bool IsClick(MPoint currentPosition, MPoint? previousPosition)
-    {
-        if (previousPosition is null)
-            return false;
-
-        return
-            Math.Abs(currentPosition.X - previousPosition.X) < SystemParameters.MinimumHorizontalDragDistance &&
-            Math.Abs(currentPosition.Y - previousPosition.Y) < SystemParameters.MinimumVerticalDragDistance;
+        var position = e.GetTouchPoint(this).Position.ToScreenPosition();
+        if (OnMapPointerPressed([position]))
+            return;
     }
 
     private void MapControlTouchUp(object? sender, TouchEventArgs e)
     {
-        var touchPosition = e.GetTouchPoint(this).Position.ToMapsui();
-        if (IsClick(touchPosition, _pointerDownPosition))
-        {
-            OnInfo(CreateMapInfoEventArgs(touchPosition, touchPosition, 1));
-        }
+        var position = e.GetTouchPoint(this).Position.ToScreenPosition();
+        if (OnMapPointerReleased([position]))
+            return;
     }
 
-    public void OpenBrowser(string url)
+    public void OpenInBrowser(string url)
     {
-        Process.Start(new ProcessStartInfo
+        Catch.TaskRun(() =>
         {
-            FileName = url,
-            // The default for this has changed in .net core, you have to explicitly set if to true for it to work.
-            UseShellExecute = true
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = url,
+                // The default for this has changed in .net core, you have to explicitly set if to true for it to work.
+                UseShellExecute = true
+            });
         });
     }
 
     private void MapControlMouseMove(object sender, MouseEventArgs e)
     {
-        if (HandleWidgetPointerMove(e.GetPosition(this).ToMapsui(), e.LeftButton == MouseButtonState.Pressed, 0, GetShiftPressed()))
+        var isHovering = IsHovering(e);
+        var position = e.GetPosition(this).ToScreenPosition();
+
+        if (OnMapPointerMoved([position], isHovering))
             return;
 
-        if (IsInBoxZoomMode())
-        {
-            DrawRectangle(e.GetPosition(this));
-            return;
-        }
-
-        _currentMousePosition = e.GetPosition(this).ToMapsui();
-
-        if (_mouseDown)
-        {
-            if (_previousMousePosition == null)
-            {
-                // Usually MapControlMouseLeftButton down initializes _previousMousePosition but in some
-                // situations it can be null. So far I could only reproduce this in debug mode when putting
-                // a breakpoint and continuing.
-                return;
-            }
-
-            _flingTracker.AddEvent(1, _currentMousePosition, DateTime.Now.Ticks);
-            Map.Navigator.Drag(_currentMousePosition, _previousMousePosition);
-            _previousMousePosition = _currentMousePosition;
-        }
-    }
-
-    public void ZoomToBox(MPoint beginPoint, MPoint endPoint)
-    {
-        var box = new MRect(beginPoint.X, beginPoint.Y, endPoint.X, endPoint.Y);
-        Map.Navigator.ZoomToBox(box, duration: 300); ;
-        ClearBBoxDrawing();
-    }
-
-    private void ClearBBoxDrawing()
-    {
-        RunOnUIThread(() => _selectRectangle.Visibility = Visibility.Collapsed);
-    }
-
-    private void DrawRectangle(Point newPos)
-    {
-        if (_mouseDown)
-        {
-            if (_previousMousePosition == null) return; // can happen during debug
-
-            var from = _previousMousePosition;
-            var to = newPos;
-
-            if (from.X > to.X)
-            {
-                var temp = from;
-                from.X = to.X;
-                to.X = temp.X;
-            }
-
-            if (from.Y > to.Y)
-            {
-                var temp = from;
-                from.Y = to.Y;
-                to.Y = temp.Y;
-            }
-
-            _selectRectangle.Width = to.X - from.X;
-            _selectRectangle.Height = to.Y - from.Y;
-            _selectRectangle.Margin = new Thickness(from.X, from.Y, 0, 0);
-            _selectRectangle.Visibility = Visibility.Visible;
-        }
+        if (!isHovering)
+            _manipulationTracker.Manipulate([position], Map.Navigator.Manipulate);
     }
 
     private double ViewportWidth => ActualWidth;
@@ -435,31 +338,25 @@ public partial class MapControl : Grid, IMapControl, IDisposable
         e.TranslationBehavior.DesiredDeceleration = 25 * 96.0 / (1000.0 * 1000.0);
     }
 
-    private void OnManipulationStarted(object? sender, ManipulationStartedEventArgs e)
-    {
-        Map.Navigator.ClearPinchState();
-    }
-
     private void OnManipulationDelta(object? sender, ManipulationDeltaEventArgs e)
     {
-        Map.Navigator.Pinch(GetPinchState(e));
-        e.Handled = true;
+        Map.Navigator.Manipulate(ToManipulation(e));
     }
 
-    private PinchState GetPinchState(ManipulationDeltaEventArgs e)
+    private static MapsuiManipulation ToManipulation(ManipulationDeltaEventArgs e)
     {
         var translation = e.DeltaManipulation.Translation;
 
-        var center = e.ManipulationOrigin.ToMapsui().Offset(translation.X, translation.Y);
-        var radius = GetDeltaScale(e.DeltaManipulation.Scale);
-        var angle = e.DeltaManipulation.Rotation;
+        var previousCenter = e.ManipulationOrigin.ToScreenPosition();
+        var center = previousCenter.Offset(translation.X, translation.Y);
+        var scaleFactor = GetScaleFactor(e.DeltaManipulation.Scale);
+        var rotationChange = e.DeltaManipulation.Rotation;
 
-        return new PinchState(center, radius, angle);
+        return new MapsuiManipulation(center, previousCenter, scaleFactor, rotationChange, e.CumulativeManipulation.Rotation);
     }
 
-    private double GetDeltaScale(Vector scale)
+    private static double GetScaleFactor(Vector scale)
     {
-        if (Map.Navigator.ZoomLock) return 1;
         var deltaScale = (scale.X + scale.Y) / 2;
         if (Math.Abs(deltaScale) < Constants.Epsilon)
             return 1; // If there is no scaling the deltaScale will be 0.0 in Windows Phone (while it is 1.0 in wpf)
@@ -467,20 +364,14 @@ public partial class MapControl : Grid, IMapControl, IDisposable
         return deltaScale;
     }
 
-    private void OnManipulationCompleted(object? sender, ManipulationCompletedEventArgs e)
-    {
-        Refresh();
-    }
+    private void OnManipulationCompleted(object? sender, ManipulationCompletedEventArgs e) => Refresh();
 
     private void SKElementOnPaintSurface(object? sender, SKPaintSurfaceEventArgs args)
     {
         if (PixelDensity <= 0)
             return;
-
         var canvas = args.Surface.Canvas;
-
         canvas.Scale(PixelDensity, PixelDensity);
-
         CommonDrawControl(canvas);
     }
 
@@ -490,6 +381,7 @@ public partial class MapControl : Grid, IMapControl, IDisposable
             ?? throw new Exception("PresentationSource is null");
         var compositionTarget = presentationSource.CompositionTarget
             ?? throw new Exception("CompositionTarget is null");
+
         var matrix = compositionTarget.TransformToDevice;
 
         var dpiX = matrix.M11;
@@ -502,11 +394,6 @@ public partial class MapControl : Grid, IMapControl, IDisposable
 
     protected virtual void Dispose(bool disposing)
     {
-        if (disposing)
-        {
-            _map?.Dispose();
-        }
-
         CommonDispose(disposing);
     }
 
@@ -519,5 +406,10 @@ public partial class MapControl : Grid, IMapControl, IDisposable
     private static bool GetShiftPressed()
     {
         return Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift);
+    }
+
+    private static bool IsHovering(MouseEventArgs e)
+    {
+        return e.LeftButton != MouseButtonState.Pressed;
     }
 }

@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using Mapsui.Logging;
 
 namespace Mapsui.Extensions;
 
@@ -54,7 +53,7 @@ public static class FeatureExtensions
 
 
     public static IEnumerable<IFeature> Project(this IEnumerable<IFeature> features, string? fromCRS,
-        string? toCRS, IProjection? projection = null, Func<IFeature, IFeature>? copy = null)
+        string? toCRS, IProjection? projection = null)
     {
         if (!CrsHelper.IsProjectionNeeded(fromCRS, toCRS))
             return features;

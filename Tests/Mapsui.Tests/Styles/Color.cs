@@ -21,10 +21,10 @@ public static class ColorTests
     [Test]
     public static void ColorFromKnownString()
     {
-        var color = Color.FromString("LightBlue");
+        var color = Color.LightBlue;
         ClassicAssert.True(color.R == 0xAD && color.G == 0xD8 && color.B == 0xE6);
 
-        color = Color.FromString("PaleVioletRed");
+        color = Color.PaleVioletRed;
         ClassicAssert.True(color.R == 0xDB && color.G == 0x70 && color.B == 0x93);
     }
 
@@ -36,6 +36,16 @@ public static class ColorTests
 
         color = Color.FromString("#ABC");
         ClassicAssert.True(color.R == 0xAA && color.G == 0xBB && color.B == 0xCC);
+    }
+
+    [Test]
+    public static void ColorFromKnownColor()
+    {
+        var color = Color.FromString("Magenta");
+        ClassicAssert.True(color.R == Color.Magenta.R && color.G == Color.Magenta.G && color.B == Color.Magenta.B);
+
+        color = Color.FromString("Yellow");
+        ClassicAssert.True(color.R == Color.Yellow.R && color.G == Color.Yellow.G && color.B == Color.Yellow.B);
     }
 
     [Test]
@@ -112,5 +122,33 @@ public static class ColorTests
 
         color = Color.FromString("hSlA    (    270. ,  75%   ,25 ,0.5   )");
         ClassicAssert.True(color.R == 64 && color.G == 16 && color.B == 112 && color.A == 127);
+    }
+
+    [Test]
+    public static void CastToSystemDrawingColorTest()
+    {
+        // Arrange
+        var color = new Color(63, 127, 191, 255);
+        var expectedSystemDrawingColor = System.Drawing.Color.FromArgb(255, 63, 127, 191);
+
+        // Act
+        var systemDrawingColor = (System.Drawing.Color)color;
+
+        // Assert
+        Assert.That(systemDrawingColor, Is.EqualTo(expectedSystemDrawingColor));
+    }
+
+    [Test]
+    public static void CastFromSystemDrawingColorTest()
+    {
+        // Arrange
+        var systemDrawingColor = System.Drawing.Color.FromArgb(255, 63, 127, 191);
+        var expectedColor = new Color(63, 127, 191, 255);
+
+        // Act
+        var color = (Color)systemDrawingColor;
+
+        // Assert
+        Assert.That(color, Is.EqualTo(expectedColor));
     }
 }

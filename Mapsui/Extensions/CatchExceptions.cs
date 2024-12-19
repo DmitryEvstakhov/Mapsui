@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Mapsui.Logging;
 
@@ -24,7 +23,7 @@ public static class Catch
     {
         try
         {
-            await func();
+            await func().ConfigureAwait(false);
         }
         catch (Exception e)
         {
@@ -55,7 +54,7 @@ public static class Catch
         {
             try
             {
-                await func();
+                await func().ConfigureAwait(false);
             }
             catch (Exception e)
             {

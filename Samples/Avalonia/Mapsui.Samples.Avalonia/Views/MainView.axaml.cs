@@ -1,4 +1,3 @@
-using System;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -6,8 +5,9 @@ using Avalonia.Input;
 using Mapsui.Extensions;
 using Mapsui.Samples.Common;
 using Mapsui.Samples.Common.Extensions;
-using Mapsui.Samples.CustomWidget;
+
 using Mapsui.Tiling;
+using Mapsui.Samples.Common.Maps.Widgets;
 
 namespace Mapsui.Samples.Avalonia.Views;
 
@@ -30,7 +30,7 @@ public partial class MainView : UserControl
 
         MapControl.Map.Layers.Add(OpenStreetMap.CreateTileLayer());
         MapControl.Map.Navigator.RotationLock = false;
-        MapControl.Renderer.WidgetRenders[typeof(CustomWidget.CustomWidget)] = new CustomWidgetSkiaRenderer();
+        MapControl.Renderer.WidgetRenders[typeof(CustomWidget)] = new CustomWidgetSkiaRenderer();
 
         RotationSlider.PointerMoved += RotationSliderOnPointerMoved;
 
@@ -80,7 +80,7 @@ public partial class MainView : UserControl
         {
             Catch.Exceptions(async () =>
             {
-                MapControl.Map?.Layers.Clear();
+                MapControl.Map?.Layers.ClearAllGroups();
                 await sample.SetupAsync(MapControl);
                 MapControl.Refresh();
             });

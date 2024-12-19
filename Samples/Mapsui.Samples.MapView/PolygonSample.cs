@@ -16,7 +16,7 @@ public class PolygonSample : IMapViewSample
 
     public bool UpdateLocation => true;
 
-    public bool OnClick(object? sender, EventArgs args)
+    public bool OnTap(object? sender, EventArgs args)
     {
         var mapView = sender as UI.Maui.MapView;
         var e = args as MapClickedEventArgs;
@@ -39,13 +39,13 @@ public class PolygonSample : IMapViewSample
         polygon.Positions.Add(new Position(center.Latitude + diffY, center.Longitude + diffX));
         polygon.Positions.Add(new Position(center.Latitude - diffY, center.Longitude + diffX));
 
-        // Be carefull: holes should have other direction of Positions.
+        // Be careful: holes should have other direction of Positions.
         // If Positions is clockwise, than Holes should all be counter clockwise and the other way round.
-        polygon.Holes.Add(new Position[] {
+        polygon.Holes.Add([
             new Position(center.Latitude - diffY * 0.3, center.Longitude - diffX * 0.3),
             new Position(center.Latitude + diffY * 0.3, center.Longitude + diffX * 0.3),
             new Position(center.Latitude + diffY * 0.3, center.Longitude - diffX * 0.3),
-        });
+        ]);
 
         polygon.IsClickable = true;
         polygon.Clicked += (s, a) =>

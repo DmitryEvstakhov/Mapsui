@@ -21,7 +21,7 @@ public class CalloutSample : ISample
 
         var map = new Map
         {
-            BackColor = Color.FromString("WhiteSmoke"),
+            BackColor = Color.WhiteSmoke,
         };
 
         map.Navigator.ZoomToBox(layer.Extent!.Grow(layer.Extent.Width * 2));
@@ -85,10 +85,13 @@ public class CalloutSample : ISample
 
             Type = CalloutType.Detail,
             MaxWidth = 120,
-            RectRadius = 10,
-            ShadowWidth = 4,
             Enabled = true,
-            SymbolOffset = new Offset(0, SymbolStyle.DefaultHeight * 1f)
+            SymbolOffset = new Offset(0, SymbolStyle.DefaultHeight * 1f),
+            BalloonDefinition = new CalloutBalloonDefinition
+            {
+                RectRadius = 10,
+                ShadowWidth = 4,
+            },
         };
     }
 }

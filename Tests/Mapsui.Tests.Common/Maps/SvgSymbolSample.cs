@@ -1,9 +1,6 @@
 ﻿using Mapsui.Layers;
-using Mapsui.Providers;
 using Mapsui.Samples.Common;
 using Mapsui.Styles;
-using Mapsui.UI;
-using Mapsui.Utilities;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
@@ -18,7 +15,6 @@ public class SvgSymbolSample : ISample
 
     public Task<Map> CreateMapAsync() => Task.FromResult(CreateMap());
 
-
     public static Map CreateMap()
     {
         var layer = new MemoryLayer
@@ -30,7 +26,7 @@ public class SvgSymbolSample : ISample
 
         var map = new Map
         {
-            BackColor = Color.FromString("WhiteSmoke"),
+            BackColor = Color.WhiteSmoke,
         };
 
         map.Navigator.ZoomToBox(layer.Extent!.Grow(layer.Extent.Width * 2));
@@ -40,24 +36,30 @@ public class SvgSymbolSample : ISample
         return map;
     }
 
-    public static IEnumerable<IFeature> CreateFeatures()
-    {
-        var pinId = typeof(SvgSymbolSample).LoadSvgId("Resources.Images.Pin.svg");
-
-        return new List<IFeature>
+    public static IEnumerable<IFeature> CreateFeatures() =>
+    [
+        new PointFeature(new MPoint(50, 50))
         {
-            new PointFeature(new MPoint(50, 50)) {
-                Styles = new[] {new SymbolStyle { BitmapId = pinId } }
-            },
-            new PointFeature(new MPoint(50, 100)) {
-                Styles = new[] {new SymbolStyle { BitmapId = pinId } }
-            },
-            new PointFeature(new MPoint(100, 50)) {
-                Styles = new[] {new SymbolStyle { BitmapId = pinId } }
-            },
-            new PointFeature(new MPoint(100, 100)) {
-                Styles = new[] {new SymbolStyle { BitmapId = pinId } }
-            }
-        };
-    }
+            Styles = [CreateSymbolStyle()]
+        },
+        new PointFeature(new MPoint(50, 100))
+        {
+            Styles = [CreateSymbolStyle()]
+        },
+        new PointFeature(new MPoint(100, 50))
+        {
+            Styles = [CreateSymbolStyle()]
+        },
+        new PointFeature(new MPoint(100, 100))
+        {
+            Styles = [CreateSymbolStyle()]
+        }
+    ];
+
+    private static SymbolStyle CreateSymbolStyle() => new()
+    {
+        ImageSource = "embedded://mapsui.resources.images.pin.svg",
+        SvgFillColor = Color.FromRgba(0, 177, 0, 255),
+        SvgStrokeColor = Color.FromRgba(32, 96, 32, 255),
+    };
 }

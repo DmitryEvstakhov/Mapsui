@@ -2,6 +2,7 @@
 using Mapsui.Extensions;
 using Mapsui.Limiting;
 using Mapsui.Logging;
+using Mapsui.Manipulations;
 using Mapsui.Utilities;
 using System;
 using System.Collections.Generic;
@@ -12,16 +13,12 @@ namespace Mapsui;
 public class Navigator
 {
     private Viewport _viewport = new(0, 0, 1, 0, 0, 0);
-    private IEnumerable<AnimationEntry<Viewport>> _animations = Enumerable.Empty<AnimationEntry<Viewport>>();
-
-    private List<Action> _initialization = new();
+    private IEnumerable<AnimationEntry<Viewport>> _animations = [];
+    private readonly List<Action> _initialization = [];
     private MMinMax? _defaultZoomBounds;
     private MRect? _defaultPanBounds;
     private MMinMax? _overrideZoomBounds;
     private MRect? _overridePanBounds;
-    private double _totalRotationDelta; // We need this to calculate snapping
-    private PinchState? _previousPinchState;
-
 
     public delegate void ViewportChangedEventHandler(object sender, ViewportChangedEventArgs e);
 
@@ -151,7 +148,7 @@ public class Navigator
 
     public MouseWheelAnimation MouseWheelAnimation { get; } = new();
 
-    public void MouseWheelZoom(int mouseWheelDelta, MPoint centerOfZoom)
+    public void MouseWheelZoom(int mouseWheelDelta, ScreenPosition centerOfZoom)
     {
         // It is unexpected that this method uses the MouseWheelAnimation.Animation and Easing. 
         // At the moment this solution allows the user to change these fields, so I don't want
@@ -259,7 +256,7 @@ public class Navigator
     /// position as center.</param>
     /// <param name="duration">Duration for animation in milliseconds.</param>
     /// <param name="easing">The easing of the animation when duration is > 0</param>
-    public void ZoomTo(double resolution, MPoint centerOfZoomScreen, long duration = -1, Easing? easing = default)
+    public void ZoomTo(double resolution, ScreenPosition centerOfZoomScreen, long duration = -1, Easing? easing = default)
     {
         if (!IsInitialized)
         {
@@ -316,7 +313,7 @@ public class Navigator
     /// center of zoom.</param>
     /// <param name="duration">Duration for animation in milliseconds.</param>
     /// <param name="easing">The type of easing function used to transform from begin tot end state</param>
-    public void ZoomIn(MPoint centerOfZoom, long duration = -1, Easing? easing = default)
+    public void ZoomIn(ScreenPosition centerOfZoom, long duration = -1, Easing? easing = default)
     {
         var resolution = ZoomHelper.GetResolutionToZoomIn(Resolutions, Viewport.Resolution);
         ZoomTo(resolution, centerOfZoom, duration, easing);
@@ -330,7 +327,7 @@ public class Navigator
     /// center of zoom.</param>
     /// <param name="duration">Duration for animation in milliseconds.</param>
     /// <param name="easing">The type of easing function used to transform from begin tot end state</param>
-    public void ZoomOut(MPoint centerOfZoom, long duration = -1, Easing? easing = default)
+    public void ZoomOut(ScreenPosition centerOfZoom, long duration = -1, Easing? easing = default)
     {
         var resolution = ZoomHelper.GetResolutionToZoomOut(Resolutions, Viewport.Resolution);
         ZoomTo(resolution, centerOfZoom, duration, easing);
@@ -424,74 +421,86 @@ public class Navigator
     /// <param name="maxDuration">Maximum duration of fling deceleration></param>
     public void Fling(double velocityX, double velocityY, long maxDuration)
     {
-        if (PanLock) return;
+        if (PanLock)
+            return;
 
         _animations = FlingAnimation.Create(velocityX, velocityY, maxDuration);
     }
 
-    /// <summary>
-    /// To pan the map when dragging with mouse or single finger. This method is called from
-    /// the MapControl and is usually not called from user code. This method does not call
-    /// Navigated. So, Navigated needs to be called from the MapControl on mouse/touch up.
-    /// </summary>
-    /// <param name="positionScreen">Screen position of the dragging mouse or finger.</param>
-    /// <param name="previousPositionScreen">Previous position of the dragging mouse or finger.</param>
-    public void Drag(MPoint positionScreen, MPoint previousPositionScreen)
+    public void Manipulate(Manipulation? manipulation)
     {
-        Viewport = Drag(positionScreen, previousPositionScreen, Viewport);
-    }
-
-    private static Viewport Drag(MPoint positionScreen, MPoint previousPositionScreen, Viewport viewport)
-    {
-        var previous = viewport.ScreenToWorld(previousPositionScreen.X, previousPositionScreen.Y);
-        var current = viewport.ScreenToWorld(positionScreen.X, positionScreen.Y);
-
-        return viewport with 
-        {
-            CenterX = viewport.CenterX + previous.X - current.X, 
-            CenterY = viewport.CenterY + previous.Y - current.Y 
-        };
-    }
-
-    /// <summary>
-    /// To change the map viewport when using multiple fingers. This method is called from
-    /// the MapControl and is usually not called from user code. This method does not refresh
-    /// graphics, so this needs to be done from the MapControl on mouse/touch up.
-    /// </summary>
-    /// <param name="pinchState">The current pinch state.</param>
-    public void Pinch(PinchState pinchState)
-    {
-        if (_previousPinchState is null)
-        {
-            _previousPinchState = pinchState with { };
+        if (manipulation is null)
             return;
-        }
 
-        Pinch(pinchState, _previousPinchState);
-
-        _previousPinchState = pinchState with { };
-    }
-
-    /// <summary>
-    /// To change the map viewport when using multiple fingers. This method is called from
-    /// the MapControl and is usually not called from user code. This method does not refresh
-    /// graphics, so this needs to be done from the MapControl on mouse/touch up.
-    /// </summary>
-    /// <param name="pinchState">The current pinch state.</param>
-    /// <param name="previousPinchState">The previous pinch state.</param>
-    public void Pinch(PinchState pinchState, PinchState previousPinchState)
-    {
-        if (ZoomLock) pinchState = pinchState with { Radius = previousPinchState.Radius };
-        if (PanLock) pinchState = pinchState with { Center = previousPinchState.Center };
-        if (RotationLock) pinchState = pinchState with { Angle = previousPinchState.Angle };
-
-        _totalRotationDelta += pinchState.Angle - previousPinchState.Angle;
+        if (RotationLock)
+            manipulation = manipulation with { RotationChange = 0 };
+        if (ZoomLock)
+            manipulation = manipulation with { ScaleFactor = 1 };
+        if (PanLock)
+            manipulation = manipulation with { Center = GetScreenCenter(), PreviousCenter = GetScreenCenter() };
 
         ClearAnimations();
 
-        var viewport = TransformState(Viewport, pinchState, previousPinchState, _totalRotationDelta);
+        var viewport = TransformState(Viewport, manipulation);
         SetViewportWithLimit(viewport);
     }
+
+    private ScreenPosition GetScreenCenter() => new ScreenPosition(Viewport.Width * 0.5, Viewport.Height * 0.5);
+
+    private Viewport TransformState(Viewport viewport, Manipulation manipulation)
+    {
+        var previous = viewport.ScreenToWorld(manipulation.PreviousCenter.X, manipulation.PreviousCenter.Y);
+        var current = viewport.ScreenToWorld(manipulation.Center.X, manipulation.Center.Y);
+
+        var scaleFactor = manipulation.ScaleFactor;
+        var rotationChange = manipulation.RotationChange;
+
+        if (!RotationLock)
+        {
+            double virtualRotation = Viewport.Rotation + manipulation.TotalRotationChange;
+            rotationChange = RotationSnapper.AdjustRotationDeltaForSnapping(
+                manipulation.RotationChange, viewport.Rotation, virtualRotation, UnSnapRotation, ReSnapRotation);
+        }
+
+        var newX = viewport.CenterX + previous.X - current.X;
+        var newY = viewport.CenterY + previous.Y - current.Y;
+
+        if (scaleFactor == 1 && rotationChange == 0 && viewport.CenterX == newX && viewport.CenterY == newY)
+            return viewport;
+
+        if (scaleFactor != 1)
+        {
+            viewport = viewport with { Resolution = viewport.Resolution / scaleFactor };
+
+            // Calculate current position again with adjusted resolution
+            // Zooming should be centered on the place where the map is touched.
+            // This is done with the scale correction.
+            var scaleCorrectionX = (1 - scaleFactor) * (current.X - viewport.CenterX);
+            var scaleCorrectionY = (1 - scaleFactor) * (current.Y - viewport.CenterY);
+
+            newX -= scaleCorrectionX;
+            newY -= scaleCorrectionY;
+        }
+
+        viewport = viewport with { CenterX = newX, CenterY = newY };
+
+        if (rotationChange != 0)
+        {
+            // calculate current position again with adjusted resolution
+            current = viewport.ScreenToWorld(manipulation.Center.X, manipulation.Center.Y);
+            viewport = viewport with { Rotation = viewport.Rotation + rotationChange };
+            // calculate current position again with adjusted resolution
+            var postRotation = viewport.ScreenToWorld(manipulation.Center.X, manipulation.Center.Y);
+            viewport = viewport with
+            {
+                CenterX = viewport.CenterX - (postRotation.X - current.X),
+                CenterY = viewport.CenterY - (postRotation.Y - current.Y)
+            };
+        }
+
+        return viewport;
+    }
+
 
     public void SetSize(double width, double height)
     {
@@ -512,82 +521,18 @@ public class Navigator
         RefreshDataRequest?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>
-    /// Call this method before the first Pinch call. The Pinch method tracks the start pinch angle which is needed 
-    /// to for rotation snapping and the previous pinch state.
-    /// </summary>
-    public void ClearPinchState()
-    {
-        _totalRotationDelta = 0; // Reset the total. It will incremented in each Pinch call
-        _previousPinchState = null;
-    }
-
-    private Viewport TransformState(
-        Viewport viewport, PinchState pinchState, PinchState previousPinchState, double totalRotationDelta)
-    {
-        var previous = viewport.ScreenToWorld(previousPinchState.Center.X, previousPinchState.Center.Y);
-        var current = viewport.ScreenToWorld(pinchState.Center.X, pinchState.Center.Y);
-
-        var resolutionDelta = pinchState.Radius / previousPinchState.Radius;
-        var rotationDelta = pinchState.Angle - previousPinchState.Angle;
-
-        if (!RotationLock)
-        {
-            double virtualRotation = Viewport.Rotation + totalRotationDelta; ;
-            rotationDelta = RotationSnapper.AdjustRotationDeltaForSnapping(
-                rotationDelta, viewport.Rotation, virtualRotation, UnSnapRotation, ReSnapRotation);
-        }
-
-        var newX = viewport.CenterX + previous.X - current.X;
-        var newY = viewport.CenterY + previous.Y - current.Y;
-
-        if (resolutionDelta == 1 && rotationDelta == 0 && viewport.CenterX == newX && viewport.CenterY == newY)
-            return viewport;
-
-        if (resolutionDelta != 1)
-        {
-            viewport = viewport with { Resolution = viewport.Resolution / resolutionDelta };
-
-            // Calculate current position again with adjusted resolution
-            // Zooming should be centered on the place where the map is touched.
-            // This is done with the scale correction.
-            var scaleCorrectionX = (1 - resolutionDelta) * (current.X - viewport.CenterX);
-            var scaleCorrectionY = (1 - resolutionDelta) * (current.Y - viewport.CenterY);
-
-            newX -= scaleCorrectionX;
-            newY -= scaleCorrectionY;
-        }
-
-        viewport = viewport with { CenterX = newX, CenterY = newY };
-
-        if (rotationDelta != 0)
-        {
-            // calculate current position again with adjusted resolution
-            current = viewport.ScreenToWorld(pinchState.Center.X, pinchState.Center.Y); 
-            viewport = viewport with { Rotation = viewport.Rotation + rotationDelta };
-            // calculate current position again with adjusted resolution
-            var postRotation = viewport.ScreenToWorld(pinchState.Center.X, pinchState.Center.Y); 
-            viewport = viewport with { 
-                CenterX = viewport.CenterX - (postRotation.X - current.X), 
-                CenterY = viewport.CenterY - (postRotation.Y - current.Y) 
-            };
-        }
-
-        return viewport;
-    }
-
     private void ClearAnimations()
     {
         if (_animations.Any())
         {
-            _animations = Enumerable.Empty<AnimationEntry<Viewport>>();
+            _animations = [];
         }
     }
 
     /// <summary>
     /// Property change event
     /// </summary>
-    /// <param name="propertyName">Name of property that changed</param>
+    /// <param name="oldViewport">Name of property that changed</param>
     private void OnViewportChanged(Viewport oldViewport)
     {
         ViewportChanged?.Invoke(this, new ViewportChangedEventArgs(oldViewport));
@@ -625,7 +570,7 @@ public class Navigator
         Viewport = Limit(viewport);
     }
 
-    private bool ShouldAnimationsBeHaltedBecauseOfLimiting(Viewport input, Viewport output)
+    private static bool ShouldAnimationsBeHaltedBecauseOfLimiting(Viewport input, Viewport output)
     {
         var zoomLimited = input.Resolution != output.Resolution;
         var fullyLimited =
@@ -680,7 +625,7 @@ public class Navigator
     /// <summary>
     /// Returns a number between 0 and 1 that represents the limiting of the resolution.
     /// </summary>
-    /// <param name="orignalResolution"></param>
+    /// <param name="originalResolution"></param>
     /// <param name="goalResolution"></param>
     /// <param name="limitedResolution"></param>
     /// <returns></returns>
@@ -749,7 +694,7 @@ public class Navigator
     internal int GetAnimationsCount => _animations.Count();
 
     /// <summary> Default Resolutions automatically set on Layers changed </summary>
-    internal IReadOnlyList<double> DefaultResolutions { get; set; } = new List<double>();
+    internal IReadOnlyList<double> DefaultResolutions { get; set; } = [];
 
     /// <summary> Default Zoom Bounds automatically set on Layers changed </summary>
 

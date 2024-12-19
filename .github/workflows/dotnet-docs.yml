@@ -1,10 +1,10 @@
 name: Build Website
-env:
-  PUBLISH_DIR: website/Samples/
+
 on:
   push:
     branches:  
-      - main   
+      - main
+      - feature/docs
       
 permissions:
   contents: write
@@ -16,32 +16,46 @@ jobs:
   build-and-publish-website:
     runs-on: windows-latest
     steps:
-    - name: Checkout
-      uses: actions/checkout@v3
+        
+#Begin install mkdocs        
+    - uses: actions/setup-python@v5
       with:
-        fetch-depth: 0 
-    # .Net 8 update     
+        python-version: 3.x
+    - run: echo "cache_id=$(date --utc '+%V')" >> $GITHUB_ENV 
+    - uses: actions/cache@v4
+      with:
+        key: mkdocs-material-${{ env.cache_id }}
+        path: .cache
+        restore-keys: |
+          mkdocs-material-
+    - run: |
+        pip install mkdocs-material 
+        pip install mkdocs-glightbox
+#End install mkdocs        
+
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0         
+        filter: tree:0 
     - name: Setup .NET 8 SDK
-      uses: actions/setup-dotnet@v3
+      uses: actions/setup-dotnet@v4
       with:
          dotnet-version: |
-           8.0.x
-         include-prerelease: true
-    - name: install wasm-tools
-      run: dotnet workload install wasm-tools
+           9.0.x
+    - name: install workloads
+      run: dotnet workload install maui macos android ios maccatalyst wasm-tools wasm-tools-net8 
     - name: Run DocFx
-      # Use a .cmd so this script can be run locally for testing
-      run: docfx\build-site.cmd
+      shell: pwsh
+      run: ./Scripts/BuildDocumentationWebSite.ps1
       # build blazor samples to website/samples/
     - name: Build Blazor Website Sample
       shell: pwsh
-      run: |
-        ./Scripts/BuildSamplesWebsite.ps1     
+      run: ./Scripts/BuildSamplesWebsite.ps1     
     - name: Upload artifact
-      uses: actions/upload-pages-artifact@v1
+      uses: peaceiris/actions-gh-pages@v4
       with:
-      # Upload the 'website' folder as artifact
-        path: 'website'
-    - name: Deploy to GitHub Pages
-      id: deployment
-      uses: actions/deploy-pages@v1
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./website
+        destination_dir: v5
+        keep_files: true

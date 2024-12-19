@@ -3,11 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Mapsui.Disposing;
 using Mapsui.Extensions;
 using Mapsui.Layers;
 using Mapsui.Logging;
-using Mapsui.Nts.Widgets;
+using Mapsui.Manipulations;
 using Mapsui.Rendering.Skia.Cache;
 using Mapsui.Rendering.Skia.Extensions;
 using Mapsui.Rendering.Skia.SkiaStyles;
@@ -20,35 +19,32 @@ using Mapsui.Widgets.InfoWidgets;
 using Mapsui.Widgets.ScaleBar;
 using SkiaSharp;
 
-#pragma warning disable IDISP008 // Don't assign member with injected created disposable
-
 namespace Mapsui.Rendering.Skia;
 
 public sealed class MapRenderer : IRenderer, IDisposable
 {
-    private readonly DisposableWrapper<IRenderCache> _renderCache;
+    private readonly RenderService _renderService;
     private long _currentIteration;
 
-    public IRenderCache RenderCache => _renderCache.WrappedObject;
+    static MapRenderer()
+    {
+        DefaultRendererFactory.Create = () => new MapRenderer();
+    }
 
+    public bool EnabledVectorCache
+    {
+        get => _renderService.VectorCache.Enabled;
+        set => _renderService.VectorCache.Enabled = value;
+    }
+
+    public IRenderService RenderService => _renderService;
     public IDictionary<Type, IWidgetRenderer> WidgetRenders { get; } = new Dictionary<Type, IWidgetRenderer>();
-
     /// <summary>
     /// Dictionary holding all special renderers for styles
     /// </summary>
     public IDictionary<Type, IStyleRenderer> StyleRenderers { get; } = new Dictionary<Type, IStyleRenderer>();
 
-    static MapRenderer()
-    {
-        DefaultRendererFactory.Create = () => new MapRenderer();
-        DefaultRendererFactory.CreateWithCache = f => new MapRenderer(f);
-    }
-
-    public MapRenderer(IRenderCache renderer)
-    {
-        _renderCache = new DisposableWrapper<IRenderCache>(renderer, false);
-        InitRenderer();
-    }
+    public ImageSourceCache ImageSourceCache => _renderService.ImageSourceCache;
 
     private void InitRenderer()
     {
@@ -62,15 +58,20 @@ public sealed class MapRenderer : IRenderer, IDisposable
         WidgetRenders[typeof(TextBoxWidget)] = new TextBoxWidgetRenderer();
         WidgetRenders[typeof(ScaleBarWidget)] = new ScaleBarWidgetRenderer();
         WidgetRenders[typeof(ZoomInOutWidget)] = new ZoomInOutWidgetRenderer();
-        WidgetRenders[typeof(IconButtonWidget)] = new IconButtonWidgetRenderer();
+        WidgetRenders[typeof(ImageButtonWidget)] = new ImageButtonWidgetRenderer();
         WidgetRenders[typeof(BoxWidget)] = new BoxWidgetRenderer();
-        WidgetRenders[typeof(EditingWidget)] = new EditingWidgetRenderer();
         WidgetRenders[typeof(LoggingWidget)] = new LoggingWidgetRenderer();
+        WidgetRenders[typeof(InputOnlyWidget)] = new InputOnlyWidgetRenderer();
     }
 
-    public MapRenderer()
+    public MapRenderer() : this(10000)
+    { }
+
+    public MapRenderer(int vectorCacheCapacity)
     {
-        _renderCache = new DisposableWrapper<IRenderCache>(new RenderCache(), true);
+        // Todo: Think about an alternative to initialize. Perhaps the capacity should
+        // be determined by the number of features used in one Paint iteration.
+        _renderService = new RenderService(vectorCacheCapacity);
         InitRenderer();
     }
 
@@ -95,7 +96,7 @@ public sealed class MapRenderer : IRenderer, IDisposable
     }
 
     public MemoryStream RenderToBitmapStream(Viewport viewport, IEnumerable<ILayer> layers,
-        Color? background = null, float pixelDensity = 1, IEnumerable<IWidget>? widgets = null, RenderFormat renderFormat = RenderFormat.Png)
+        Color? background = null, float pixelDensity = 1, IEnumerable<IWidget>? widgets = null, RenderFormat renderFormat = RenderFormat.Png, int quality = 100)
     {
         try
         {
@@ -124,7 +125,9 @@ public sealed class MapRenderer : IRenderer, IDisposable
                         using var skCanvas = surface.Canvas;
                         RenderTo(viewport, layers, background, pixelDensity, widgets, skCanvas);
                         using var image = surface.Snapshot();
-                        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+                        var options = new SKPngEncoderOptions(SKPngEncoderFilterFlags.AllFilters, 9); // 9 is the highest compression
+                        using var peekPixels = image.PeekPixels();
+                        using var data = peekPixels.Encode(options) ?? throw new NotSupportedException();
                         data.SaveTo(memoryStream);
                         break;
                     }
@@ -134,9 +137,25 @@ public sealed class MapRenderer : IRenderer, IDisposable
                         using var skCanvas = surface.Canvas;
                         RenderTo(viewport, layers, background, pixelDensity, widgets, skCanvas);
                         using var image = surface.Snapshot();
-                        var options = new SKWebpEncoderOptions(SKWebpEncoderCompression.Lossless, 100);
+                        var compression = quality == 100
+                            ? SKWebpEncoderCompression.Lossless
+                            : SKWebpEncoderCompression.Lossy;
+                        var options = new SKWebpEncoderOptions(compression, quality);
                         using var peekPixels = image.PeekPixels();
-                        using var data = peekPixels.Encode(options);
+                        using var data = peekPixels.Encode(options) ?? throw new NotSupportedException();
+                        data.SaveTo(memoryStream);
+                        break;
+                    }
+                case RenderFormat.Jpeg:
+                    {
+                        using var surface = SKSurface.Create(imageInfo);
+                        using var skCanvas = surface.Canvas;
+                        skCanvas.Clear(SKColors.White); // Avoiding Black Background when Transparent Pixels
+                        RenderTo(viewport, layers, background, pixelDensity, widgets, skCanvas);
+                        using var image = surface.Snapshot();
+                        var options = new SKJpegEncoderOptions(quality, SKJpegEncoderDownsample.Downsample420, SKJpegEncoderAlphaOption.Ignore);
+                        using var peekPixels = image.PeekPixels();
+                        using var data = peekPixels.Encode(options) ?? throw new NotSupportedException();
                         data.SaveTo(memoryStream);
                         break;
                     }
@@ -170,7 +189,7 @@ public sealed class MapRenderer : IRenderer, IDisposable
         {
             layers = layers.ToList();
 
-            VisibleFeatureIterator.IterateLayers(viewport, layers, _currentIteration, (v, l, s, f, o, i) => { RenderFeature(canvas, v, l, s, f, o, i); });    
+            VisibleFeatureIterator.IterateLayers(viewport, layers, _currentIteration, (v, l, s, f, o, i) => RenderFeature(canvas, v, l, s, f, o, i));
 
             _currentIteration++;
         }
@@ -189,7 +208,7 @@ public sealed class MapRenderer : IRenderer, IDisposable
             canvas.Save();
             // We have a special renderer, so try, if it could draw this
             var styleRenderer = (ISkiaStyleRenderer)renderer;
-            var result = styleRenderer.Draw(canvas, viewport, layer, feature, style, RenderCache, iteration);
+            var result = styleRenderer.Draw(canvas, viewport, layer, feature, style, _renderService, iteration);
             // Restore old canvas
             canvas.Restore();
             // Was it drawn?
@@ -201,13 +220,13 @@ public sealed class MapRenderer : IRenderer, IDisposable
 
     private void Render(object canvas, Viewport viewport, IEnumerable<IWidget> widgets, float layerOpacity)
     {
-        WidgetRenderer.Render(canvas, viewport, widgets, WidgetRenders, layerOpacity);
+        WidgetRenderer.Render(canvas, viewport, widgets, WidgetRenders, _renderService, layerOpacity);
     }
 
-    public MapInfo? GetMapInfo(double x, double y, Viewport viewport, IEnumerable<ILayer> layers, int margin = 0)
+    public MapInfo GetMapInfo(double x, double y, Viewport viewport, IEnumerable<ILayer> layers, int margin = 0)
     {
-        // todo: use margin to increase the pixel area
-        // todo: We will need to select on style instead of layer
+        // Todo: Use margin to increase the pixel area
+        // Todo: Select on style instead of layer
 
         var mapInfoLayers = layers
             .Select(l => l is ISourceLayer sl and not ILayerFeatureInfo ? sl.SourceLayer : l)
@@ -217,7 +236,7 @@ public sealed class MapRenderer : IRenderer, IDisposable
         var tasks = new List<Task>();
 
         var list = new List<MapInfoRecord>[mapInfoLayers.Count];
-        var result = new MapInfo(new MPoint(x, y), viewport.ScreenToWorld(x, y), viewport.Resolution);
+        var result = new MapInfo(new ScreenPosition(x, y), viewport.ScreenToWorld(x, y), viewport.Resolution);
 
         if (!viewport.ToExtent()?.Contains(viewport.ScreenToWorld(result.ScreenPosition)) ?? false) return result;
 
@@ -236,7 +255,11 @@ public sealed class MapRenderer : IRenderer, IDisposable
 
             using (var surface = SKSurface.Create(imageInfo))
             {
-                if (surface == null) return null;
+                if (surface == null)
+                {
+                    Logger.Log(LogLevel.Error, "SKSurface is null while getting MapInfo.  This is not expected.");
+                    return result;
+                }
 
                 surface.Canvas.ClipRect(new SKRect((float)(x - 1), (float)(y - 1), (float)(x + 1), (float)(y + 1)));
                 surface.Canvas.Clear(SKColors.Transparent);
@@ -246,7 +269,7 @@ public sealed class MapRenderer : IRenderer, IDisposable
 
                 for (var index = 0; index < mapInfoLayers.Count; index++)
                 {
-                    var mapList = list[index] = new List<MapInfoRecord>();
+                    var mapList = list[index] = [];
                     var infoLayer = mapInfoLayers[index];
                     if (infoLayer is ILayerFeatureInfo layerFeatureInfo)
                     {
@@ -255,7 +278,7 @@ public sealed class MapRenderer : IRenderer, IDisposable
                             try
                             {
                                 // creating new list to avoid multithreading problems
-                                mapList = new List<MapInfoRecord>();
+                                mapList = [];
                                 // get information from ILayer Feature Info
                                 var features = await layerFeatureInfo.GetFeatureInfoAsync(viewport, x, y);
                                 foreach (var it in features)
@@ -278,7 +301,7 @@ public sealed class MapRenderer : IRenderer, IDisposable
                     else
                     {
                         // get information from ILayer
-                        VisibleFeatureIterator.IterateLayers(viewport, new[] { infoLayer }, 0,
+                        VisibleFeatureIterator.IterateLayers(viewport, [infoLayer], 0,
                             (v, layer, style, feature, opacity, iteration) =>
                             {
                                 try
@@ -323,6 +346,6 @@ public sealed class MapRenderer : IRenderer, IDisposable
 
     public void Dispose()
     {
-        _renderCache.Dispose();
+        _renderService.Dispose();
     }
 }

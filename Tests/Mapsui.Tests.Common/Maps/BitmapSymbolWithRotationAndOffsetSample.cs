@@ -1,12 +1,9 @@
 ﻿using System.Collections.Generic;
 using System.Threading.Tasks;
-using Mapsui.Extensions;
 using Mapsui.Layers;
 using Mapsui.Nts;
-using Mapsui.Providers;
 using Mapsui.Samples.Common;
 using Mapsui.Styles;
-using Mapsui.UI;
 using NetTopologySuite.Geometries;
 
 namespace Mapsui.Tests.Common.Maps;
@@ -30,7 +27,7 @@ public class BitmapSymbolWithRotationAndOffsetSample : ISample
 
         var map = new Map
         {
-            BackColor = Color.FromString("WhiteSmoke"),
+            BackColor = Color.WhiteSmoke,
         };
 
         map.Navigator.ZoomToBox(layer.Extent!.Grow(layer.Extent.Width * 2));
@@ -57,13 +54,13 @@ public class BitmapSymbolWithRotationAndOffsetSample : ISample
 
     private static GeometryFeature CreateFeatureWithRotatedBitmapSymbol(double x, double y, double rotation)
     {
-        var bitmapId = typeof(BitmapSymbolWithRotationAndOffsetSample).LoadBitmapId("Resources.Images.iconthatneedsoffset.png");
+        var imageSource = "embedded://Mapsui.Tests.Common.Resources.Images.iconthatneedsoffset.png";
 
         var feature = new GeometryFeature { Geometry = new Point(x, y) };
 
         feature.Styles.Add(new SymbolStyle
         {
-            BitmapId = bitmapId,
+            ImageSource = imageSource,
             SymbolOffset = new Offset { Y = -24 },
             SymbolRotation = rotation,
             RotateWithMap = true,

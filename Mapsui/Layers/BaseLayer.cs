@@ -6,11 +6,13 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Threading;
+using Mapsui.UI;
 
 namespace Mapsui.Layers;
 
 public abstract class BaseLayer : ILayer
 {
+    private PropertyChangedWeakEventManager? _eventMangerPropertyChanged;
     private static int _instanceCounter;
     private bool _busy;
     private bool _enabled;
@@ -38,7 +40,7 @@ public abstract class BaseLayer : ILayer
         IsActive = true;
     }
 
-    internal static int NextId()
+    public static int NextId()
     {
         // use interlocked which is thread safe ++ is not thread safe
         return Interlocked.Increment(ref _instanceCounter);
@@ -57,7 +59,15 @@ public abstract class BaseLayer : ILayer
     /// <summary>
     /// Called whenever a property changed
     /// </summary>
-    public event PropertyChangedEventHandler? PropertyChanged;
+    public event PropertyChangedEventHandler? PropertyChanged
+    {
+        add
+        {
+            _eventMangerPropertyChanged ??= new();
+            _eventMangerPropertyChanged.AddListener(this, value);
+        }
+        remove => _eventMangerPropertyChanged?.RemoveListener(this, value);
+    }
 
     /// <inheritdoc />
     public event DataChangedEventHandler? DataChanged;
@@ -191,7 +201,7 @@ public abstract class BaseLayer : ILayer
     public HyperlinkWidget Attribution { get; set; } = new();
 
     /// <inheritdoc />
-    public virtual IReadOnlyList<double> Resolutions { get; } = new List<double>();
+    public virtual IReadOnlyList<double> Resolutions { get; } = [];
 
     /// <inheritdoc />
     public bool IsMapInfoLayer { get; set; }
@@ -204,7 +214,7 @@ public abstract class BaseLayer : ILayer
 
     public void DataHasChanged()
     {
-        DataChanged?.Invoke(this, new DataChangedEventArgs());
+        DataChanged?.Invoke(this, new DataChangedEventArgs(Name));
     }
 
     public override string ToString()
@@ -214,7 +224,7 @@ public abstract class BaseLayer : ILayer
 
     protected virtual void OnPropertyChanged(string name)
     {
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        _eventMangerPropertyChanged?.RaiseEvent(this, new PropertyChangedEventArgs(name));
     }
 
     protected void OnDataChanged(DataChangedEventArgs args)

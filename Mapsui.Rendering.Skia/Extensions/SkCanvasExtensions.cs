@@ -1,4 +1,5 @@
-﻿using SkiaSharp;
+﻿using Mapsui.Rendering.Skia.Cache;
+using SkiaSharp;
 
 namespace Mapsui.Rendering.Skia.Extensions;
 
@@ -8,7 +9,7 @@ public static class SkCanvasExtensions
     {
         canvas.DrawPath(path.Instance, paint.Instance);
     }
-    
+
     public static void DrawRect(this SKCanvas canvas, SKRect rect, CacheTracker<SKPaint> paint)
     {
         canvas.DrawRect(rect, paint.Instance);

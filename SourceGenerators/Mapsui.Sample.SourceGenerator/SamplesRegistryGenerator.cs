@@ -1,4 +1,5 @@
-﻿using System;
+﻿#pragma warning disable IDE0005
+#pragma warning disable IDE0055
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -10,14 +11,14 @@ using Microsoft.CodeAnalysis.Text;
 namespace Mapsui.Sample.SourceGenerator;
 
 [Generator]
-public class SamplesRegistryGenerator : ISourceGenerator    
+public class SamplesRegistryGenerator : ISourceGenerator
 {
     public void Initialize(GeneratorInitializationContext context)
     {
         // Uncomment to debug SourceCode Generator
         // System.Diagnostics.Debugger.Launch();
     }
-
+    
     public void Execute(GeneratorExecutionContext context)
     {
         // begin creating the source we'll inject into the users compilation
@@ -25,11 +26,13 @@ public class SamplesRegistryGenerator : ISourceGenerator
 using System;
 namespace {{context.Compilation.Assembly.Name}}
 {
+    /// <summary> Samples Class </summary>
     public static class Samples
     {
         // Avoid double registration
         private static bool _registered;
         
+        /// <summary> Sample Register Method </summary>
         public static void Register() 
         {
             if (_registered)
@@ -38,13 +41,13 @@ namespace {{context.Compilation.Assembly.Name}}
             _registered = true;
 
 """);
-        
+
         // using the context, get a list of syntax trees in the users compilation
         var syntaxTrees = context.Compilation.SyntaxTrees;
 
         var alreadyRegistered = new HashSet<string>();
-        var sampleInterfaces = new HashSet<string>{ "ISampleBase", "ISample", "ISampleTest", "IMapViewSample" };
-        
+        var sampleInterfaces = new HashSet<string> { "ISampleBase", "ISample", "ISampleTest", "IMapViewSample" };
+
         // add the filepath of each tree to the class we're building
         foreach (SyntaxTree tree in syntaxTrees)
         {

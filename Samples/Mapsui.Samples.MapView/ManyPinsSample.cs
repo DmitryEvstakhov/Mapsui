@@ -1,4 +1,5 @@
 ﻿using Mapsui.Extensions;
+using Mapsui.Manipulations;
 using Mapsui.Samples.Common;
 using Mapsui.Samples.Common.Maps.Demo;
 using Mapsui.Styles;
@@ -9,7 +10,6 @@ using Mapsui.Widgets.InfoWidgets;
 using Microsoft.Maui.Graphics;
 using System;
 using System.Diagnostics;
-using System.IO;
 using System.Reflection;
 using Color = Microsoft.Maui.Graphics.Color;
 using KnownColor = Mapsui.UI.Maui.KnownColor;
@@ -27,7 +27,7 @@ public class ManyPinsSample : IMapViewSample
 
     public bool UpdateLocation => true;
 
-    public bool OnClick(object? sender, EventArgs args)
+    public bool OnTap(object? sender, EventArgs args)
     {
         var mapView = sender as UI.Maui.MapView;
         var e = args as MapClickedEventArgs;
@@ -39,9 +39,9 @@ public class ManyPinsSample : IMapViewSample
         foreach (var str in assembly.GetManifestResourceNames())
             System.Diagnostics.Debug.WriteLine(str);
 
-        switch (e?.NumOfTaps)
+        switch (e?.TapType)
         {
-            case 1:
+            case TapType.Single:
                 var pin = new Pin(mapView)
                 {
                     Label = $"PinType.Pin {markerNum++}",
@@ -54,10 +54,10 @@ public class ManyPinsSample : IMapViewSample
                 };
                 pin.Callout.Anchor = new Point(0, pin.Height * pin.Scale);
                 pin.Callout.RectRadius = rnd.Next(0, 30);
-                pin.Callout.ArrowHeight = rnd.Next(0, 20);
-                pin.Callout.ArrowWidth = rnd.Next(0, 20);
-                pin.Callout.ArrowAlignment = (ArrowAlignment)rnd.Next(0, 4);
-                pin.Callout.ArrowPosition = rnd.Next(0, 100) / 100;
+                pin.Callout.TailHeight = rnd.Next(0, 20);
+                pin.Callout.TailWidth = rnd.Next(0, 20);
+                pin.Callout.TailAlignment = (TailAlignment)rnd.Next(0, 4);
+                pin.Callout.TailPosition = rnd.Next(0, 100) / 100;
                 pin.Callout.BackgroundColor = KnownColor.White;
                 pin.Callout.Color = pin.Color;
                 if (rnd.Next(0, 3) < 2)
@@ -71,41 +71,27 @@ public class ManyPinsSample : IMapViewSample
                 else
                 {
                     pin.Callout.Type = CalloutType.Detail;
-                    pin.Callout.Content = 1;
+                    pin.Callout.ContentId = "1";
                 }
                 mapView.Pins.Add(pin);
                 pin.ShowCallout();
                 break;
-            case 2:
+            case TapType.Double:
                 foreach (var r in assembly.GetManifestResourceNames())
                     System.Diagnostics.Debug.WriteLine(r);
 
-                using (var stream = assembly.GetManifestResourceStream("Mapsui.Samples.Common.Images.Ghostscript_Tiger.svg"))
-                {
-                    using StreamReader reader = new StreamReader(stream!);
-                    var svgString = reader.ReadToEnd();
-                    mapView?.Pins.Add(new Pin(mapView)
-                    {
-                        Label = $"PinType.Svg {markerNum++}",
-                        Position = e.Point,
-                        Type = PinType.Svg,
-                        Scale = 0.1f,
-                        Svg = svgString
-                    });
-                }
-
-                break;
-            case 3:
-                var icon = assembly.GetManifestResourceStream("Mapsui.Samples.Common.Images.loc.png")!.ToBytes();
+                var resourceName = "embedded://Mapsui.Samples.Common.Images.Ghostscript_Tiger.svg";
                 mapView?.Pins.Add(new Pin(mapView)
                 {
-                    Label = $"PinType.Icon {markerNum++}",
+                    Label = $"PinType.Svg {markerNum++}",
                     Position = e.Point,
-                    Type = PinType.Icon,
-                    Scale = 0.5f,
-                    Icon = icon
+                    Type = PinType.ImageSource,
+                    Scale = 0.1f,
+                    ImageSource = resourceName
                 });
                 break;
+            default:
+                throw new Exception("Unknown TapType. This is bug in Mapsui.");
         }
 
         return true;
@@ -116,22 +102,11 @@ public class ManyPinsSample : IMapViewSample
         mapControl.Map = OsmSample.CreateMap();
 
         if (mapControl.Performance == null)
-            mapControl.Performance = new Utilities.Performance();
+            mapControl.Performance = new Performance();
 
-        var widget = new PerformanceWidget(mapControl.Performance);
-
-        widget.Touched += (sender, args) =>
-        {
-            mapControl?.Performance.Clear();
-            mapControl?.RefreshGraphics();
-
-            args.Handled = true;
-        };
-
-        mapControl.Map.Widgets.Add(widget);
+        mapControl.Map.Widgets.Add(CreatePerformanceWidget(mapControl));
         mapControl.Renderer.WidgetRenders[typeof(PerformanceWidget)] = new Rendering.Skia.SkiaWidgets.PerformanceWidgetRenderer();
 
-        ((UI.Maui.MapView)mapControl).UseDoubleTap = true;
         ((UI.Maui.MapView)mapControl).UniqueCallout = true;
 
         var sw = new Stopwatch();
@@ -144,13 +119,27 @@ public class ManyPinsSample : IMapViewSample
             list.Add(CreatePin(i));
         }
 
-        var timePart1 = sw.Elapsed;
+        _ = sw.Elapsed;
 
         ((ObservableRangeCollection<Pin>)((UI.Maui.MapView)mapControl).Pins).AddRange(list);
 
-        var timePart2 = sw.Elapsed;
+        _ = sw.Elapsed;
 
         sw.Stop();
+    }
+
+    private static PerformanceWidget CreatePerformanceWidget(IMapControl mapControl)
+    {
+        ArgumentNullException.ThrowIfNull(mapControl.Performance);
+        return new PerformanceWidget(mapControl.Performance)
+        {
+            Tapped = (sender, args) =>
+            {
+                mapControl?.Performance.Clear();
+                mapControl?.RefreshGraphics();
+                return true;
+            }
+        };
     }
 
     private Pin CreatePin(int num)
@@ -169,10 +158,10 @@ public class ManyPinsSample : IMapViewSample
         };
         pin.Callout.Anchor = new Point(0, pin.Height * pin.Scale);
         pin.Callout.RectRadius = rnd.Next(0, 30);
-        pin.Callout.ArrowHeight = rnd.Next(0, 20);
-        pin.Callout.ArrowWidth = rnd.Next(0, 20);
-        pin.Callout.ArrowAlignment = (ArrowAlignment)rnd.Next(0, 4);
-        pin.Callout.ArrowPosition = rnd.Next(0, 100) / 100;
+        pin.Callout.TailHeight = rnd.Next(0, 20);
+        pin.Callout.TailWidth = rnd.Next(0, 20);
+        pin.Callout.TailAlignment = (TailAlignment)rnd.Next(0, 4);
+        pin.Callout.TailPosition = rnd.Next(0, 100) / 100;
         pin.Callout.BackgroundColor = KnownColor.White;
         pin.Callout.Color = pin.Color;
         if (rnd.Next(0, 3) < 2)
@@ -186,7 +175,7 @@ public class ManyPinsSample : IMapViewSample
         else
         {
             pin.Callout.Type = CalloutType.Detail;
-            pin.Callout.Content = 1;
+            pin.Callout.ContentId = "1";
         }
 
         return pin;

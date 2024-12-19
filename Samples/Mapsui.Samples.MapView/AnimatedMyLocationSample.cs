@@ -31,7 +31,6 @@ public sealed class AnimatedMyLocationSample : IMapViewSample, IDisposable
         _mapView.MyLocationLayer.IsMoving = true;
         _mapView.MyLocationEnabled = true;
         _mapView.MyLocationFollow = true;
-        _mapView.UseDoubleTap = true;
 
         _mapView.MyLocationLayer.UpdateMyLocation(_newLocation);
         _mapView.Map.Navigator.CenterOn(_newLocation.ToMapsui());
@@ -40,7 +39,7 @@ public sealed class AnimatedMyLocationSample : IMapViewSample, IDisposable
     }
 
     public bool UpdateLocation => false;
-    public bool OnClick(object? sender, EventArgs args)
+    public bool OnTap(object? sender, EventArgs args)
     {
         return true;
     }

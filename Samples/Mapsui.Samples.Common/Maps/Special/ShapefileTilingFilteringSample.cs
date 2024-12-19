@@ -1,16 +1,13 @@
 ﻿using System.IO;
 using System.Threading.Tasks;
-using Mapsui.Extensions;
 using Mapsui.Layers;
 using Mapsui.Nts;
 using Mapsui.Nts.Providers.Shapefile;
 using Mapsui.Providers;
-using Mapsui.Samples.Common.Maps.Performance;
 using Mapsui.Samples.Common.Utilities;
 using Mapsui.Styles;
 using Mapsui.Styles.Thematics;
 using Mapsui.Tiling.Layers;
-using Mapsui.UI;
 
 #pragma warning disable IDISP001 // Dispose created
 #pragma warning disable IDISP004 // Don't ignore created IDisposable
@@ -103,9 +100,9 @@ public class ShapefileTilingFilteringSample : ISample
         // Scaling city icons based on city population.
         // Cities below 1.000.000 gets the smallest symbol.
         // Cities with more than 5.000.000 the largest symbol.
-        var bitmapId = typeof(ShapefileTileSample).LoadBitmapId(@"Images.icon.png");
-        var cityMin = new SymbolStyle { BitmapId = bitmapId, SymbolScale = 0.5f };
-        var cityMax = new SymbolStyle { BitmapId = bitmapId, SymbolScale = 1f };
+        var imageSource = "embedded://Mapsui.Samples.Common.Images.icon.png";
+        var cityMin = new SymbolStyle { ImageSource = imageSource, SymbolScale = 0.5f };
+        var cityMax = new SymbolStyle { ImageSource = imageSource, SymbolScale = 1f };
         return new GradientTheme("POPULATION", 1000000, 5000000, cityMin, cityMax);
     }
 

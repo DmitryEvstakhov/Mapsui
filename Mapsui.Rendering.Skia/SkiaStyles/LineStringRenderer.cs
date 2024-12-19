@@ -1,8 +1,11 @@
 using Mapsui.Extensions;
+using Mapsui.Manipulations;
 using Mapsui.Nts.Extensions;
+using Mapsui.Rendering.Skia.Cache;
 using Mapsui.Rendering.Skia.Extensions;
 using Mapsui.Styles;
 using NetTopologySuite.Geometries;
+using NetTopologySuite.GeometriesGraph;
 using SkiaSharp;
 
 namespace Mapsui.Rendering.Skia;
@@ -10,12 +13,13 @@ namespace Mapsui.Rendering.Skia;
 public static class LineStringRenderer
 {
     public static void Draw(SKCanvas canvas, Viewport viewport, VectorStyle? vectorStyle,
-        IFeature feature, LineString lineString, float opacity, IRenderCache renderCache)
+        IFeature feature, LineString lineString, float opacity, RenderService renderService, int position)
     {
         if (vectorStyle == null)
             return;
-        
-        SKPath ToPath((long featureId, MRect extent, double rotation, float lineWidth) valueTuple)
+
+        // lineString - relevant for GeometryCollection children
+        SKPath ToPath((long featureId, int position, MRect extent, double rotation, float lineWidth) valueTuple)
         {
             var result = lineString.ToSkiaPath(viewport, viewport.ToSkiaRect(), valueTuple.lineWidth);
             _ = result.Bounds;
@@ -28,8 +32,8 @@ public static class LineStringRenderer
         var lineWidth = (float)(vectorStyle.Line?.Width ?? 1f);
         if (vectorStyle.Line.IsVisible())
         {
-            using var paint = renderCache.GetOrCreatePaint((vectorStyle.Line, opacity), CreateSkPaint);
-            using var path = renderCache.GetOrCreatePath((feature.Id, extent, rotation, lineWidth),ToPath);
+            using var paint = renderService.VectorCache.GetOrCreate((vectorStyle.Line, opacity), CreateSkPaint);
+            using var path = renderService.VectorCache.GetOrCreate((feature.Id, position, extent, rotation, lineWidth), ToPath);
             canvas.DrawPath(path, paint);
         }
 
@@ -160,10 +164,10 @@ public static class LineStringRenderer
         var deltaFirstEndpoint = new Point(arrowBranchesEndPoints[0].X - arrowHeadPosition.X, arrowBranchesEndPoints[0].Y - arrowHeadPosition.Y);
         var deltaSecondEndpoint = new Point(arrowBranchesEndPoints[1].X - arrowHeadPosition.X, arrowBranchesEndPoints[1].Y - arrowHeadPosition.Y);
 
-        DrawArrow(canvas, arrowStyle, arrowHeadScreenPosition.ToCoordinate(), deltaFirstEndpoint.Coordinate, deltaSecondEndpoint.Coordinate, opacity);
+        DrawArrow(canvas, arrowStyle, arrowHeadScreenPosition, deltaFirstEndpoint.Coordinate, deltaSecondEndpoint.Coordinate, opacity);
     }
 
-    private static void DrawArrow(SKCanvas canvas, IStyle style, Coordinate destination, Coordinate firstEndpoint, Coordinate secondEndpoint, float opacity)
+    private static void DrawArrow(SKCanvas canvas, IStyle style, ScreenPosition destination, Coordinate firstEndpoint, Coordinate secondEndpoint, float opacity)
     {
         var vectorStyle = style is VectorStyle ? (VectorStyle)style : new VectorStyle();
         canvas.Save();

@@ -1,13 +1,8 @@
 ﻿using System.Collections.Generic;
-using System.Reflection;
 using System.Threading.Tasks;
-using Mapsui.Extensions;
 using Mapsui.Layers;
-using Mapsui.Providers;
 using Mapsui.Samples.Common;
 using Mapsui.Styles;
-using Mapsui.UI;
-using Mapsui.Utilities;
 
 namespace Mapsui.Tests.Common.Maps;
 
@@ -16,7 +11,7 @@ public class BitmapSymbolSample : ISample
     public string Name => "Bitmap Symbol";
     public string Category => "Tests";
 
-    public Task<Map> CreateMapAsync() => Task.FromResult(CreateMap());
+    public Task<Map> CreateMapAsync() => Task.FromResult(BitmapSymbolSample.CreateMap());
 
 
     public static Map CreateMap()
@@ -30,7 +25,7 @@ public class BitmapSymbolSample : ISample
 
         var map = new Map
         {
-            BackColor = Color.FromString("WhiteSmoke"),
+            BackColor = Color.WhiteSmoke,
         };
 
         map.Navigator.ZoomToBox(layer.Extent!.Grow(layer.Extent.Width * 2));
@@ -42,27 +37,27 @@ public class BitmapSymbolSample : ISample
 
     public static IEnumerable<IFeature> CreateFeatures()
     {
-        var circleIconId = typeof(BitmapSymbolSample).LoadBitmapId("Resources.Images.circle.png");
-        var checkeredIconId = typeof(BitmapSymbolSample).LoadBitmapId("Resources.Images.checkered.png");
+        var circleImageSource = "embedded://Mapsui.Samples.Common.Images.circle.png";
+        var checkeredImageSource = "embedded://Mapsui.Samples.Common.Images.checkered.png";
 
-        return new List<IFeature>
-        {
+        return
+        [
             new PointFeature(new MPoint(50, 50))
             {
-                Styles = new[] {new VectorStyle {Fill = new Brush(Color.Red)}}
+                Styles = [new VectorStyle { Fill = new Brush(Color.Red) }]
             },
             new PointFeature(new MPoint(50, 100))
             {
-                Styles = new[] {new SymbolStyle { BitmapId = circleIconId}}
+                Styles = [new SymbolStyle { ImageSource = circleImageSource }]
             },
             new PointFeature(new MPoint(100, 50))
             {
-                Styles = new[] {new SymbolStyle { BitmapId = checkeredIconId}}
+                Styles = [new SymbolStyle { ImageSource = checkeredImageSource }]
             },
             new PointFeature(new MPoint(100, 100))
             {
-                Styles = new[] {new VectorStyle {Fill = new Brush(Color.Green), Outline = null}}
+                Styles = [new VectorStyle { Fill = new Brush(Color.Green), Outline = null }]
             }
-        };
+        ];
     }
 }

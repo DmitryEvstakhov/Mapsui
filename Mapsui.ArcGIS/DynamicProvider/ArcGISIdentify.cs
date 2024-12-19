@@ -4,10 +4,9 @@ using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Text.Json;
 using Mapsui.Extensions;
 using Mapsui.Logging;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace Mapsui.ArcGIS.DynamicProvider;
 
@@ -59,7 +58,7 @@ public class ArcGISIdentify
         Catch.TaskRun(async () =>
         {
             //remove trailing slash from url
-            if (url.Length > 0 && url[url.Length - 1].Equals('/'))
+            if (url.Length > 0 && url[^1].Equals('/'))
                 url = url.Remove(url.Length - 1, 1);
 
             var pointGeom = string.Format(CultureInfo.InvariantCulture, "{0},{1}", x, y);
@@ -70,15 +69,7 @@ public class ArcGISIdentify
                 $"{url}/identify?f=pjson&geometryType=esriGeometryPoint&geometry={pointGeom}&tolerance={tolerance}{layersString}&mapExtent={mapExtend}&imageDisplay={imageDisplay}&returnGeometry={returnGeometry}{(sr != int.MinValue ? $"&sr={sr}" : "")}";
 
             var handler = new HttpClientHandler();
-            try
-            {
-                // Blazor does not support this,
-                handler.Credentials = credentials ?? CredentialCache.DefaultCredentials;
-            }
-            catch (PlatformNotSupportedException e)
-            {
-                Logger.Log(LogLevel.Error, e.Message, e);
-            };
+            handler.SetCredentials(credentials ?? CredentialCache.DefaultCredentials);
             using var client = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(TimeOut) };
             using var response = await client.GetAsync(requestUrl).ConfigureAwait(false);
 
@@ -90,30 +81,20 @@ public class ArcGISIdentify
 
             try
             {
-                using var dataStream = CopyAndClose(await response.Content.ReadAsStreamAsync().ConfigureAwait(false));
+                using var inputStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
 
-                if (dataStream != null)
+                _featureInfo = JsonSerializer.Deserialize(inputStream, ArcGISContext.Default.ArcGISFeatureInfo);
+
+                inputStream.Position = 0;
+
+                using (var reader = new StreamReader(inputStream))
                 {
-                    using var sReader = new StreamReader(dataStream);
-                    var jsonString = await sReader.ReadToEndAsync();
-
-                    var serializer = new JsonSerializer();
-                    var jToken = JObject.Parse(jsonString);
-                    using var jTokenReader = new JTokenReader(jToken);
-                    _featureInfo = serializer.Deserialize(jTokenReader, typeof(ArcGISFeatureInfo)) as ArcGISFeatureInfo;
-
-                    dataStream.Position = 0;
-
-                    using (var reader = new StreamReader(dataStream))
+                    var contentString = await reader.ReadToEndAsync();
+                    if (contentString.Contains("{\"error\":{\""))
                     {
-                        var contentString = await reader.ReadToEndAsync();
-                        if (contentString.Contains("{\"error\":{\""))
-                        {
-                            OnIdentifyFailed();
-                            return;
-                        }
+                        OnIdentifyFailed();
+                        return;
                     }
-                    await dataStream.DisposeAsync();
                 }
 
                 OnIdentifyFinished();
@@ -142,23 +123,6 @@ public class ArcGISIdentify
         }
 
         return layerString;
-    }
-
-    private static Stream CopyAndClose(Stream inputStream)
-    {
-        const int readSize = 256;
-        var buffer = new byte[readSize];
-        var ms = new MemoryStream();
-
-        var count = inputStream.Read(buffer, 0, readSize);
-        while (count > 0)
-        {
-            ms.Write(buffer, 0, count);
-            count = inputStream.Read(buffer, 0, readSize);
-        }
-        ms.Position = 0;
-        inputStream.Dispose();
-        return ms;
     }
 
     private void OnIdentifyFinished()

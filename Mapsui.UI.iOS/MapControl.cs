@@ -1,7 +1,6 @@
 using CoreFoundation;
-using Mapsui.Logging;
-using Mapsui.UI.iOS.Extensions;
-using Mapsui.Utilities;
+using Mapsui.Extensions;
+using Mapsui.Manipulations;
 using SkiaSharp.Views.iOS;
 using System.ComponentModel;
 
@@ -12,30 +11,31 @@ public partial class MapControl : UIView, IMapControl
 {
     private SKGLView? _glCanvas;
     private SKCanvasView? _canvas;
-    private bool _init;
-    private MPoint? _pointerDownPosition;
-
-    public static bool UseGPU { get; set; } = true;
+    private bool _canvasInitialized;
+    private readonly ManipulationTracker _manipulationTracker = new();
 
     public MapControl(CGRect frame)
         : base(frame)
     {
-        CommonInitialize();
-        Initialize();
+        SharedConstructor();
+        LocalConstructor();
     }
 
     [Preserve]
-    public MapControl(IntPtr handle) : base(handle) // used when initialized from storyboard
+    public MapControl(IntPtr handle) : base(handle) // Used when initialized from storyboard
     {
-        CommonInitialize();
-        Initialize();
+        SharedConstructor();
+        LocalConstructor();
     }
 
-    private void InitCanvas()
+    public static bool UseGPU { get; set; } = true;
+
+
+    private void InitializeCanvas()
     {
-        if (!_init)
+        if (!_canvasInitialized)
         {
-            _init = true;
+            _canvasInitialized = true;
             if (UseGPU)
             {
                 _glCanvas?.Dispose();
@@ -49,9 +49,9 @@ public partial class MapControl : UIView, IMapControl
         }
     }
 
-    private void Initialize()
+    private void LocalConstructor()
     {
-        InitCanvas();
+        InitializeCanvas();
 
         _invalidate = () =>
         {
@@ -107,34 +107,7 @@ public partial class MapControl : UIView, IMapControl
         MultipleTouchEnabled = true;
         UserInteractionEnabled = true;
 
-        var doubleTapGestureRecognizer = new UITapGestureRecognizer(OnDoubleTapped)
-        {
-            NumberOfTapsRequired = 2,
-            CancelsTouchesInView = false,
-        };
-        AddGestureRecognizer(doubleTapGestureRecognizer);
-
-        var tapGestureRecognizer = new UITapGestureRecognizer(OnSingleTapped)
-        {
-            NumberOfTapsRequired = 1,
-            CancelsTouchesInView = false,
-        };
-        tapGestureRecognizer.RequireGestureRecognizerToFail(doubleTapGestureRecognizer);
-        AddGestureRecognizer(tapGestureRecognizer);
-
         Map.Navigator.SetSize(ViewportWidth, ViewportHeight);
-    }
-
-    private void OnDoubleTapped(UITapGestureRecognizer gesture)
-    {
-        var position = GetScreenPosition(gesture.LocationInView(this));
-        OnInfo(CreateMapInfoEventArgs(position, position, 2));
-    }
-
-    private void OnSingleTapped(UITapGestureRecognizer gesture)
-    {
-        var position = GetScreenPosition(gesture.LocationInView(this));
-        OnInfo(CreateMapInfoEventArgs(position, position, 1));
     }
 
     private void OnPaintSurface(object? sender, SKPaintGLSurfaceEventArgs args)
@@ -143,9 +116,7 @@ public partial class MapControl : UIView, IMapControl
             return;
 
         var canvas = args.Surface.Canvas;
-
         canvas.Scale(PixelDensity, PixelDensity);
-
         CommonDrawControl(canvas);
     }
 
@@ -155,75 +126,54 @@ public partial class MapControl : UIView, IMapControl
             return;
 
         var canvas = args.Surface.Canvas;
-
         canvas.Scale(PixelDensity, PixelDensity);
-
         CommonDrawControl(canvas);
     }
 
-    public override void TouchesBegan(NSSet touches, UIEvent? evt)
+    public override void TouchesBegan(NSSet touches, UIEvent? e)
     {
-        base.TouchesBegan(touches, evt);
-
-        Map.Navigator.ClearPinchState();
-
-        if (touches.AnyObject is UITouch touch)
+        Catch.Exceptions(() =>
         {
-            _pointerDownPosition = touch.LocationInView(this).ToMapsui();
-            if (HandleWidgetPointerDown(_pointerDownPosition, true, 1, false))
-            {
+            base.TouchesBegan(touches, e);
+            var positions = GetScreenPositions(e, this);
+
+            if (positions.Length == 1)
+                _manipulationTracker.Restart(positions);
+
+            if (OnMapPointerPressed(positions))
                 return;
-            }
-        }
+        });
     }
 
-    public override void TouchesMoved(NSSet touches, UIEvent? evt)
+    public override void TouchesMoved(NSSet touches, UIEvent? e)
     {
-        base.TouchesMoved(touches, evt);
-
-        if (evt?.AllTouches.Count == 1)
+        Catch.Exceptions(() =>
         {
-            if (touches.AnyObject is UITouch touch)
-            {
-                var position = touch.LocationInView(this).ToMapsui();
-                if (HandleWidgetPointerMove(position, true, 0, false))
-                    return;
+            base.TouchesMoved(touches, e);
+            var positions = GetScreenPositions(e, this);
 
-                var previousPosition = touch.PreviousLocationInView(this).ToMapsui();
-                Map.Navigator.Drag(position, previousPosition);
-                Map.Navigator.ClearPinchState();
-            }
-        }
-        else if (evt?.AllTouches.Count >= 2)
-        {
-            Map.Navigator.Pinch(GetPinchState(GetLocations(evt)));
-        }
-    }
+            if (OnMapPointerMoved(positions))
+                return;
 
-    private List<MPoint> GetPreviousLocations(UIEvent evt)
-    {
-        return evt.AllTouches.Select(t => ((UITouch)t).PreviousLocationInView(this))
-                        .Select(p => new MPoint(p.X, p.Y)).ToList();
-    }
-
-    private List<MPoint> GetLocations(UIEvent evt)
-    {
-        return evt.AllTouches.Select(t => ((UITouch)t).LocationInView(this))
-            .Select(p => new MPoint(p.X, p.Y)).ToList();
+            _manipulationTracker.Manipulate(positions, Map.Navigator.Manipulate);
+        });
     }
 
     public override void TouchesEnded(NSSet touches, UIEvent? e)
     {
-        Refresh();
-
-        if (touches.AnyObject is UITouch touch)
+        Catch.Exceptions(() =>
         {
-            var position = touch.LocationInView(this).ToMapsui();
-            if (HandleWidgetPointerUp(position, _pointerDownPosition, true, 1, false))
-            {
-                return;
-            }
-        }
+            base.TouchesEnded(touches, e);
+            var positions = GetScreenPositions(e, this);
+            OnMapPointerReleased(positions);
+        });
+    }
+
+    private static ReadOnlySpan<ScreenPosition> GetScreenPositions(UIEvent? uiEvent, UIView uiView)
+    {
+        if (uiEvent is null)
+            return [];
+        return uiEvent.AllTouches.Select(t => ((UITouch)t).LocationInView(uiView)).Select(p => new ScreenPosition(p.X, p.Y)).ToArray();
     }
 
     /// <summary>
@@ -246,7 +196,7 @@ public partial class MapControl : UIView, IMapControl
         get => base.Frame;
         set
         {
-            InitCanvas();
+            InitializeCanvas();
             if (UseGPU)
             {
                 _glCanvas!.Frame = value;
@@ -264,23 +214,20 @@ public partial class MapControl : UIView, IMapControl
 
     public override void LayoutMarginsDidChange()
     {
-        InitCanvas();
+        InitializeCanvas();
         if (_glCanvas == null || _canvas == null) return;
 
         base.LayoutMarginsDidChange();
         SetViewportSize();
     }
 
-    public async void OpenBrowser(string url)
+    public void OpenInBrowser(string url)
     {
-        try
+        Catch.TaskRun(async () =>
         {
-            await UIApplication.SharedApplication.OpenUrlAsync(new NSUrl(url), new UIApplicationOpenUrlOptions());
-        }
-        catch (Exception ex)
-        {
-            Logger.Log(LogLevel.Error, ex.Message, ex);
-        }
+            using var nsUrl = new NSUrl(url);
+            await UIApplication.SharedApplication.OpenUrlAsync(nsUrl, new UIApplicationOpenUrlOptions());
+        });
     }
 
     public new void Dispose()
@@ -293,53 +240,21 @@ public partial class MapControl : UIView, IMapControl
     {
         if (disposing)
         {
-            IosCommonDispose(disposing);
-            base.Dispose(disposing);
-        }
-    }
-
-    private void IosCommonDispose(bool disposing)
-    {
-        if (disposing)
-        {
             _map?.Dispose();
             Unsubscribe();
             _glCanvas?.Dispose();
             _canvas?.Dispose();
+            base.Dispose(disposing);
         }
 
         CommonDispose(disposing);
-    }
-
-    private static PinchState GetPinchState(List<MPoint> locations)
-    {
-        if (locations.Count < 2)
-            throw new ArgumentException($"Less than two locations were passed into {nameof(GetPinchState)}");
-
-        double centerX = 0;
-        double centerY = 0;
-
-        foreach (var location in locations)
-        {
-            centerX += location.X;
-            centerY += location.Y;
-        }
-
-        centerX /= locations.Count;
-        centerY /= locations.Count;
-
-        var radius = Algorithms.Distance(centerX, centerY, locations[0].X, locations[0].Y);
-
-        var angle = Math.Atan2(locations[1].Y - locations[0].Y, locations[1].X - locations[0].X) * 180.0 / Math.PI;
-
-        return new PinchState(new MPoint(centerX, centerY), radius, angle);
     }
 
     private double ViewportWidth
     {
         get
         {
-            InitCanvas();
+            InitializeCanvas();
             return UseGPU
                 ? _glCanvas!.Frame.Width
                 : _canvas!.Frame.Width;
@@ -350,7 +265,7 @@ public partial class MapControl : UIView, IMapControl
     {
         get
         {
-            InitCanvas();
+            InitializeCanvas();
             return UseGPU
                 ? _glCanvas!.Frame.Height
                 : _canvas!.Frame.Height;
@@ -359,9 +274,11 @@ public partial class MapControl : UIView, IMapControl
 
     private double GetPixelDensity()
     {
-        InitCanvas();
+        InitializeCanvas();
         return UseGPU
             ? (double)_glCanvas!.ContentScaleFactor
             : (double)_canvas!.ContentScaleFactor;
     }
+
+    private static bool GetShiftPressed() => false;
 }

@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Diagnostics;
 using System.IO;
 using System.Text;
 using Mapsui.Logging;
@@ -134,5 +133,13 @@ public static class StreamExtensions
         {
             haystack.Position = position;
         }
+    }
+
+    public static MemoryStream CopyToMemoryStream(this Stream input)
+    {
+        var memoryStream = new MemoryStream();
+        input.CopyTo(memoryStream);
+        memoryStream.Position = 0;
+        return memoryStream;
     }
 }
