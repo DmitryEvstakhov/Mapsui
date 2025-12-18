@@ -16,6 +16,7 @@
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="SkiaSharp.Views" />
     <PackageReference Include="SkiaSharp.Views.WindowsForms" />
+    <PackageReference Include="Svg.Skia" />
   </ItemGroup>
 
   <ItemGroup>

@@ -15,6 +15,7 @@
     <PackageReference Include="BruTile" />
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="SkiaSharp.Views.WPF" />
+    <PackageReference Include="Svg.Skia" />
   </ItemGroup>
 
   <ItemGroup>
