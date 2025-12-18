@@ -1,27 +1,26 @@
-using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using BruTile;
 using BruTile.Cache;
 using BruTile.Predefined;
 using Mapsui.Extensions;
 using Mapsui.Layers;
+using Mapsui.Manipulations;
 using Mapsui.Projections;
 using Mapsui.Providers;
 using Mapsui.Rendering;
 using Mapsui.Styles;
 using Mapsui.Tiling.Extensions;
-using Attribution = BruTile.Attribution;
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace Mapsui.Tiling.Provider;
 
 /// <summary> The rasterizing tile provider. Tiles the Layer for faster Rasterizing on Zoom and Move. </summary>
 public class RasterizingTileSource : ILocalTileSource, ILayerFeatureInfo
 {
-    private readonly ConcurrentStack<IRenderer> _rasterizingLayers = new();
-    private readonly IRenderer? _rasterizer;
+    private readonly RenderService _renderService = new();
     private readonly float _pixelDensity;
     private readonly ILayer _layer;
     private ITileSchema? _tileSchema;
@@ -29,10 +28,10 @@ public class RasterizingTileSource : ILocalTileSource, ILayerFeatureInfo
     private readonly IProvider? _dataSource;
     private readonly RenderFormat _renderFormat;
     private readonly ConcurrentDictionary<TileIndex, double> _searchSizeCache = new();
+    private readonly IMapRenderer _defaultRenderer = DefaultRendererFactory.GetRenderer();
 
     public RasterizingTileSource(
         ILayer layer,
-        IRenderer? rasterizer = null,
         float pixelDensity = 1,
         IPersistentCache<byte[]>? persistentCache = null,
         IProjection? projection = null,
@@ -40,7 +39,8 @@ public class RasterizingTileSource : ILocalTileSource, ILayerFeatureInfo
     {
         _renderFormat = renderFormat;
         _layer = layer;
-        _rasterizer = rasterizer;
+        _renderService.VectorCache.Enabled = false;
+
         _pixelDensity = pixelDensity;
         PersistentCache = persistentCache ?? new NullCache();
 
@@ -65,11 +65,11 @@ public class RasterizingTileSource : ILocalTileSource, ILayerFeatureInfo
         var result = PersistentCache.Find(index);
         if (result == null)
         {
-            var renderer = GetRenderer();
-            (MSection section, ILayer renderLayer) = await CreateRenderLayerAsync(tileInfo, renderer);
-            _ = await ImageSourceCacheInitializer.FetchImagesInViewportAsync(renderer.ImageSourceCache, ToViewport(section), [renderLayer], []);
-            using var stream = renderer.RenderToBitmapStream(ToViewport(section), [renderLayer], pixelDensity: _pixelDensity, renderFormat: _renderFormat);
-            _rasterizingLayers.Push(renderer);
+            (MSection section, ILayer renderLayer) = await CreateRenderLayerAsync(tileInfo, _defaultRenderer, _renderService);
+            // We need to fetch all images at this point because in here we use a different renderer with a different cache.
+            // Perhaps a better solution is to work with one cache that is attached to the Map.
+            _ = await _renderService.ImageSourceCache.FetchAllImageDataAsync(Image.SourceToSourceId);
+            using var stream = _defaultRenderer.RenderToBitmapStream(ToViewport(section), [renderLayer], _renderService, pixelDensity: _pixelDensity, renderFormat: _renderFormat);
             result = stream?.ToArray();
             PersistentCache?.Add(index, result ?? []);
         }
@@ -77,14 +77,14 @@ public class RasterizingTileSource : ILocalTileSource, ILayerFeatureInfo
         return result;
     }
 
-    private async Task<(MSection section, ILayer RenderLayer)> CreateRenderLayerAsync(TileInfo tileInfo, IRenderer renderer)
+    private async Task<(MSection section, ILayer RenderLayer)> CreateRenderLayerAsync(TileInfo tileInfo, IMapRenderer renderer, RenderService renderService)
     {
         var indexLevel = tileInfo.Index.Level;
         Schema.Resolutions.TryGetValue(indexLevel, out var tileResolution);
 
         var resolution = tileResolution.UnitsPerPixel;
         var section = new MSection(tileInfo.Extent.ToMRect(), resolution);
-        var featureSearchGrowth = await GetAdditionalSearchSizeAroundAsync(tileInfo, renderer, section);
+        var featureSearchGrowth = await GetAdditionalSearchSizeAroundAsync(tileInfo, renderer, section, renderService);
         var extent = section.Extent;
         if (featureSearchGrowth > 0)
         {
@@ -120,7 +120,7 @@ public class RasterizingTileSource : ILocalTileSource, ILayerFeatureInfo
         return features;
     }
 
-    private async Task<double> GetAdditionalSearchSizeAroundAsync(TileInfo tileInfo, IRenderer renderer, MSection section)
+    private async Task<double> GetAdditionalSearchSizeAroundAsync(TileInfo tileInfo, IMapRenderer renderer, MSection section, RenderService renderService)
     {
         double additionalSearchSize = 0;
 
@@ -128,7 +128,7 @@ public class RasterizingTileSource : ILocalTileSource, ILayerFeatureInfo
         {
             for (int row = -1; row <= 1; row++)
             {
-                var size = await GetAdditionalSearchSizeAsync(CreateTileInfo(tileInfo, col, row), renderer, section);
+                var size = await GetAdditionalSearchSizeAsync(CreateTileInfo(tileInfo, col, row), renderer, section, renderService);
                 additionalSearchSize = Math.Max(additionalSearchSize, size);
             }
         }
@@ -151,7 +151,7 @@ public class RasterizingTileSource : ILocalTileSource, ILayerFeatureInfo
         };
     }
 
-    private async Task<double> GetAdditionalSearchSizeAsync(TileInfo tileInfo, IRenderer renderer, MSection section)
+    private async Task<double> GetAdditionalSearchSizeAsync(TileInfo tileInfo, IMapRenderer renderer, MSection section, RenderService renderService)
     {
         if (!_searchSizeCache.TryGetValue(tileInfo.Index, out var result))
         {
@@ -160,7 +160,7 @@ public class RasterizingTileSource : ILocalTileSource, ILayerFeatureInfo
             var layerStyles = _layer.Style.GetStylesToApply(section.Resolution);
             foreach (var style in layerStyles)
             {
-                if (renderer.StyleRenderers.TryGetValue(style.GetType(), out var styleRenderer))
+                if (renderer.TryGetStyleRenderer(style.GetType(), out var styleRenderer))
                 {
                     if (styleRenderer is IFeatureSize featureSize)
                     {
@@ -169,12 +169,12 @@ public class RasterizingTileSource : ILocalTileSource, ILayerFeatureInfo
                             var features = await GetFeaturesAsync(tileInfo);
                             foreach (var feature in features)
                             {
-                                tempSize = Math.Max(tempSize, featureSize.FeatureSize(style, renderer.RenderService, feature));
+                                tempSize = Math.Max(tempSize, featureSize.FeatureSize(style, renderService, feature));
                             }
                         }
                         else
                         {
-                            tempSize = featureSize.FeatureSize(style, renderer.RenderService, null);
+                            tempSize = featureSize.FeatureSize(style, renderService, null);
                         }
                     }
                 }
@@ -202,19 +202,6 @@ public class RasterizingTileSource : ILocalTileSource, ILayerFeatureInfo
         return _layer.GetFeatures(fetchInfo.Extent, fetchInfo.Resolution);
     }
 
-    private IRenderer GetRenderer()
-    {
-        if (!_rasterizingLayers.TryPop(out var rasterizer))
-        {
-            rasterizer = _rasterizer;
-            if (rasterizer == null)
-            {
-                rasterizer = DefaultRendererFactory.Create();
-            }
-        }
-        return rasterizer;
-    }
-
     public ITileSchema Schema => _tileSchema ??= new GlobalSphericalMercator();
     public string Name => _layer.Name;
     public Attribution Attribution => _attribution ??= new Attribution(_layer.Attribution.Text ?? string.Empty, _layer.Attribution.Url ?? string.Empty);
@@ -230,40 +217,35 @@ public class RasterizingTileSource : ILocalTileSource, ILayerFeatureInfo
             section.ScreenHeight);
     }
 
-    public async Task<IDictionary<string, IEnumerable<IFeature>>> GetFeatureInfoAsync(Viewport viewport, double screenX, double screenY)
+    public async Task<IDictionary<string, IEnumerable<IFeature>>> GetFeatureInfoAsync(Viewport viewport, ScreenPosition screenPosition)
     {
         var result = new Dictionary<string, IEnumerable<IFeature>>();
-        var renderer = GetRenderer();
-
         var tileInfos = Schema.GetTileInfos(viewport.ToExtent().ToExtent(), viewport.Resolution);
-        var (worldX, worldY) = viewport.ScreenToWorldXY(screenX, screenY);
+        var worldPosition = viewport.ScreenToWorld(screenPosition);
         var tileInfo = tileInfos.FirstOrDefault(f =>
-            f.Extent.MinX <= worldX && f.Extent.MaxX >= worldX && f.Extent.MinY <= worldY && f.Extent.MaxY >= worldY);
+            f.Extent.MinX <= worldPosition.X && f.Extent.MaxX >= worldPosition.X && f.Extent.MinY <= worldPosition.Y && f.Extent.MaxY >= worldPosition.Y);
 
         if (tileInfo == null)
         {
             return result;
         }
 
-        var layer = await CreateRenderLayerAsync(tileInfo, renderer);
-        var layerRenderLayer = layer.RenderLayer;
-        layerRenderLayer.IsMapInfoLayer = true;
-        var layers = new List<ILayer>
-        {
-            layerRenderLayer
-        };
+        var layer = await CreateRenderLayerAsync(tileInfo, _defaultRenderer, _renderService);
+        var renderLayer = layer.RenderLayer;
+        List<ILayer> renderLayers = [renderLayer];
 
-        var info = renderer.GetMapInfo(screenX, screenY, viewport, layers);
-        if (info != null)
+        var mapInfo = _defaultRenderer.GetMapInfo(screenPosition, viewport, renderLayers, _renderService);
+        if (mapInfo.Feature is null)
         {
-            var mapInfo = await info.GetMapInfoAsync();
-            var infos = mapInfo?.MapInfoRecords;
-            if (infos != null)
+            mapInfo = await RemoteMapInfoFetcher.GetRemoteMapInfoAsync(screenPosition, viewport, renderLayers);
+        }
+
+        var mapInfoRecords = mapInfo.MapInfoRecords;
+        if (mapInfoRecords != null)
+        {
+            foreach (var group in mapInfoRecords.GroupBy(f => f.Layer.Name))
             {
-                foreach (var group in infos.GroupBy(f => f.Layer.Name))
-                {
-                    result[group.Key] = group.Select(f => f.Feature).ToArray();
-                }
+                result[group.Key] = group.Select(f => f.Feature).ToArray();
             }
         }
 

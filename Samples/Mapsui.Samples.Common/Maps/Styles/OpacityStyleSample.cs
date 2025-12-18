@@ -6,8 +6,6 @@ using Mapsui.Tiling;
 using NetTopologySuite.Geometries;
 using System.Threading.Tasks;
 
-#pragma warning disable IDISP004 // Don't ignore created IDisposable
-
 namespace Mapsui.Samples.Common.Maps.Styles;
 
 public class OpacityStyleSample : ISample
@@ -39,6 +37,7 @@ public class OpacityStyleSample : ISample
                     PenStyle = PenStyle.Solid,
                     PenStrokeCap = PenStrokeCap.Round
                 },
+                Line = new Pen(Color.Black, 1f),
                 Opacity = 0.7f,
             }
         };
@@ -57,6 +56,8 @@ public class OpacityStyleSample : ISample
                     PenStyle = PenStyle.Solid,
                     Width = 10,
                 },
+                Outline = new Pen(Color.Gray, 1f),
+                Fill = new Brush(Color.White),
                 Opacity = 0.5f,
             }
         };

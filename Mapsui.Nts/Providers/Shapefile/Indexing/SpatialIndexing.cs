@@ -44,8 +44,10 @@ public struct Heuristic
 public class QuadTree : IDisposable
 {
     private MRect? _box;
+#pragma warning disable IDISP008 // Don't assign member with injected and created disposables. Justification: This is disposed.
     private QuadTree? _child0;
     private QuadTree? _child1;
+#pragma warning restore IDISP008 // Don't assign member with injected and created disposables. Justification: This is disposed.
 
     /// <summary>
     /// Nodes depth in a tree
@@ -142,8 +144,8 @@ public class QuadTree : IDisposable
     {
         using var fs = new FileStream(filename, FileMode.Open, FileAccess.Read);
         using var br = new BinaryReader(fs);
-        // ReSharper disable once CompareOfFloatsByEqualityOperator
-        if (br.ReadDouble() != Indexfileversion) //Check fileindex version
+
+        if (br.ReadDouble() != Indexfileversion) // Check file index version
         {
             fs.Close();
             throw new ObsoleteFileFormatException(

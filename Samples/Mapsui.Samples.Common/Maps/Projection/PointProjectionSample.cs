@@ -11,7 +11,7 @@ namespace Mapsui.Samples.Common.Maps.Projection;
 
 public class PointProjectionSample : ISample
 {
-    public string Name => "Point projection";
+    public string Name => "PointProjection";
     public string Category => "Projection";
 
     // The region below is used by docfx to include a code snippet in the generated documentation, search for #projectionsample
@@ -36,7 +36,7 @@ public class PointProjectionSample : ISample
         map.Layers.Add(geometryLayer);
         map.Navigator.ZoomToBox(extent);
 
-        map.Widgets.Add(new MapInfoWidget(map));
+        map.Widgets.Add(new MapInfoWidget(map, l => l.Name == "Cities"));
 
         return Task.FromResult(map);
     }
@@ -60,19 +60,18 @@ public class PointProjectionSample : ISample
             DataSource = dataSource,
             Name = "Cities",
             Style = CreateCityStyle(),
-            IsMapInfoLayer = true
         };
     }
 
 
-    private static SymbolStyle CreateCityStyle()
+    private static ImageStyle CreateCityStyle()
     {
         var imageSource = "embedded://Mapsui.Samples.Common.Images.location.png";
 
-        return new SymbolStyle
+        return new ImageStyle
         {
-            ImageSource = imageSource,
-            SymbolOffset = new Offset { Y = 64 },
+            Image = imageSource,
+            Offset = new Offset { Y = 64 },
             SymbolScale = 0.25,
             Opacity = 0.5f
         };

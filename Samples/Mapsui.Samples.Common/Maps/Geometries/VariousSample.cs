@@ -13,7 +13,7 @@ namespace Mapsui.Samples.Common.Maps.Geometries;
 
 public class VariousSample : ISample, ISampleTest
 {
-    public string Name => "Various geometries";
+    public string Name => "VariousGeometries";
     public string Category => "Geometries";
 
     public Task<Map> CreateMapAsync()
@@ -55,9 +55,9 @@ public class VariousSample : ISample, ISampleTest
             .Select(p => new PointFeature(p) { Styles = new List<IStyle> { style } }).ToList();
     }
 
-    private static SymbolStyle CreateBitmapStyle(string embeddedResourcePath)
+    private static ImageStyle CreateBitmapStyle(string embeddedResourcePath)
     {
-        return new SymbolStyle { ImageSource = embeddedResourcePath, SymbolScale = 0.75 };
+        return new ImageStyle { Image = embeddedResourcePath, SymbolScale = 0.75 };
     }
 
     public async Task InitializeTestAsync(IMapControl mapControl)

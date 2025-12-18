@@ -20,9 +20,9 @@ using Mapsui.Cache;
 using Mapsui.Extensions;
 using Mapsui.Layers;
 using Mapsui.Logging;
+using Mapsui.Manipulations;
 using Mapsui.Projections;
 using Mapsui.Rendering;
-using Mapsui.Utilities;
 
 namespace Mapsui.Providers.Wms;
 
@@ -39,17 +39,17 @@ public class WmsProvider : IProvider, IProjectingProvider, ILayerFeatureInfo
 {
     private string? _mimeType;
     private readonly Client? _wmsClient;
-    private Func<string, Task<Stream>>? _getStreamAsync;
+    private Func<string, Task<byte[]>>? _getBytesAsync;
     private readonly IUrlPersistentCache? _persistentCache;
     private static int[]? _axisOrder;
     private readonly CrsAxisOrderRegistry _crsAxisOrderRegistry = new();
 
     public static IUrlPersistentCache? DefaultCache { get; set; }
 
-    public WmsProvider(XmlDocument capabilities, Func<string, Task<Stream>>? getStreamAsync = null, IUrlPersistentCache? persistentCache = null)
-        : this(new Client(capabilities, getStreamAsync), persistentCache: persistentCache ?? DefaultCache)
+    public WmsProvider(XmlDocument capabilities, Func<string, Task<byte[]>>? getBytesAsync = null, IUrlPersistentCache? persistentCache = null)
+        : this(new Client(capabilities, getBytesAsync), persistentCache: persistentCache ?? DefaultCache)
     {
-        InitializeGetStreamAsyncMethod(getStreamAsync);
+        InitializeGetBytesAsyncMethod(getBytesAsync);
     }
 
     /// <summary>
@@ -58,23 +58,23 @@ public class WmsProvider : IProvider, IProjectingProvider, ILayerFeatureInfo
     /// <param name="url">Url of WMS server</param>
     /// <param name="persistentCache"></param>
     /// <param name="wmsVersion">Version number of wms leave null to get the default service version</param>
-    /// <param name="getStreamAsync">Download method, leave null for default</param>
+    /// <param name="getBytesAsync">Download method, leave null for default</param>
     /// <param name="userAgent">user Agent</param>
-    public static async Task<WmsProvider> CreateAsync(string url, string? wmsVersion = null, Func<string, Task<Stream>>? getStreamAsync = null, IUrlPersistentCache? persistentCache = null, string? userAgent = null)
+    public static async Task<WmsProvider> CreateAsync(string url, string? wmsVersion = null, Func<string, Task<byte[]>>? getBytesAsync = null, IUrlPersistentCache? persistentCache = null, string? userAgent = null)
     {
-        var client = await Client.CreateAsync(url, wmsVersion, getStreamAsync, persistentCache: persistentCache ?? DefaultCache, userAgent);
+        var client = await Client.CreateAsync(url, wmsVersion, getBytesAsync, persistentCache: persistentCache ?? DefaultCache, userAgent);
         var provider = new WmsProvider(client, persistentCache: persistentCache ?? DefaultCache)
         {
             UserAgent = userAgent
         };
-        provider.InitializeGetStreamAsyncMethod(getStreamAsync);
+        provider.InitializeGetBytesAsyncMethod(getBytesAsync);
         return provider;
     }
 
-    private WmsProvider(Client wmsClient, Func<string, Task<Stream>>? getStreamAsync = null, IUrlPersistentCache? persistentCache = null)
+    private WmsProvider(Client wmsClient, Func<string, Task<byte[]>>? getBytesAsync = null, IUrlPersistentCache? persistentCache = null)
     {
         _persistentCache = persistentCache ?? DefaultCache;
-        InitializeGetStreamAsyncMethod(getStreamAsync);
+        InitializeGetBytesAsyncMethod(getBytesAsync);
         _wmsClient = wmsClient;
         TimeOut = 10000;
         ContinueOnError = true;
@@ -93,9 +93,9 @@ public class WmsProvider : IProvider, IProjectingProvider, ILayerFeatureInfo
         StylesList = [];
     }
 
-    private void InitializeGetStreamAsyncMethod(Func<string, Task<Stream>>? getStreamAsync)
+    private void InitializeGetBytesAsyncMethod(Func<string, Task<byte[]>>? getBytesAsync)
     {
-        _getStreamAsync = getStreamAsync ?? GetStreamAsync;
+        _getBytesAsync = getBytesAsync ?? GetBytesAsync;
     }
 
     /// <summary>
@@ -349,7 +349,7 @@ public class WmsProvider : IProvider, IProjectingProvider, ILayerFeatureInfo
 
         try
         {
-            var bytes = await _persistentCache.UrlCachedArrayAsync(url, _getStreamAsync);
+            var bytes = await _persistentCache.GetCachedBytesAsync(url, _getBytesAsync);
 
             if (section.Extent == null)
             {
@@ -495,11 +495,10 @@ public class WmsProvider : IProvider, IProjectingProvider, ILayerFeatureInfo
 
         foreach (var url in urls)
         {
-            if (_getStreamAsync == null)
+            if (_getBytesAsync == null)
                 yield break;
 
-            using var task = await _getStreamAsync(url);
-            var bytes = StreamHelper.ReadFully(task);
+            var bytes = await _getBytesAsync(url);
             yield return new MemoryStream(bytes);
         }
     }
@@ -568,19 +567,19 @@ public class WmsProvider : IProvider, IProjectingProvider, ILayerFeatureInfo
     {
         var (success, raster) = await TryGetMapAsync(fetchInfo.Section);
         if (success)
-            return new[] { new RasterFeature(raster) };
+            return [new RasterFeature(raster)];
         return [];
     }
 
-    private async Task<Stream> GetStreamAsync(string url)
+    private async Task<byte[]> GetBytesAsync(string url)
     {
         var handler = new HttpClientHandler();
         handler.SetCredentials(Credentials);
 
-        var client = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(TimeOut) };
+        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(TimeOut) };
         client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent ?? "If you use Mapsui please specify a user-agent specific to your app");
-        var req = new HttpRequestMessage(new HttpMethod(GetPreferredMethod().Type?.ToUpper() ?? "GET"), url);
-        var response = await client.SendAsync(req).ConfigureAwait(false);
+        using var req = new HttpRequestMessage(new HttpMethod(GetPreferredMethod().Type?.ToUpper() ?? "GET"), url);
+        using var response = await client.SendAsync(req).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -592,10 +591,11 @@ public class WmsProvider : IProvider, IProjectingProvider, ILayerFeatureInfo
             throw new Exception($"Unexpected WMS response content type. Expected - {_mimeType}, got - {response.Content.Headers.ContentType?.MediaType}");
         }
 
-        return await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+        using var result = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+        return result.ToBytes();
     }
 
-    public async Task<IDictionary<string, IEnumerable<IFeature>>> GetFeatureInfoAsync(Viewport viewport, double screenX, double screenY)
+    public async Task<IDictionary<string, IEnumerable<IFeature>>> GetFeatureInfoAsync(Viewport viewport, ScreenPosition screenPosition)
     {
         IDictionary<string, IEnumerable<IFeature>> result = new Dictionary<string, IEnumerable<IFeature>>();
         var getFeatureInfo = new GetFeatureInfo
@@ -614,12 +614,12 @@ public class WmsProvider : IProvider, IProjectingProvider, ILayerFeatureInfo
         var infoFormat = GetFeatureInfoFormat();
 
         var halfSymbolSize = 1.0 / 2.0; // 1 pixel size
-        var point = viewport.ScreenToWorld(screenX, screenY);
-        var minPoint = viewport.ScreenToWorld(screenX - halfSymbolSize, screenY - halfSymbolSize);
-        var maxPoint = viewport.ScreenToWorld(screenX + halfSymbolSize, screenY + halfSymbolSize);
+        var point = viewport.ScreenToWorld(screenPosition);
+        var minPoint = viewport.ScreenToWorld(screenPosition.X - halfSymbolSize, screenPosition.Y - halfSymbolSize);
+        var maxPoint = viewport.ScreenToWorld(screenPosition.X + halfSymbolSize, screenPosition.Y + halfSymbolSize);
 
-        var extent = new MRect(minPoint.X, minPoint.Y, maxPoint.X, maxPoint.Y);
-        var featureInfo = await getFeatureInfo.RequestAsync(resource.OnlineResource!, wmsVersion!, infoFormat, srs!, layer!, extent.MinX, extent.MinY, extent.MaxX, extent.MaxY, (int)screenX, (int)screenY, (int)viewport.Width, (int)viewport.Height).ConfigureAwait(false);
+        var extent = new MRect(minPoint.X, maxPoint.Y, maxPoint.X, minPoint.Y); // Note that the Y axis is inverted by ScreenToWorld
+        var featureInfo = await getFeatureInfo.RequestAsync(resource.OnlineResource!, wmsVersion!, infoFormat, srs!, layer!, extent.MinX, extent.MinY, extent.MaxX, extent.MaxY, (int)screenPosition.X, (int)screenPosition.Y, (int)viewport.Width, (int)viewport.Height).ConfigureAwait(false);
         if (featureInfo != null)
         {
             if (featureInfo.LayerName != null)

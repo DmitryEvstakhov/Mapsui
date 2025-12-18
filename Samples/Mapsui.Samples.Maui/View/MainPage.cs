@@ -1,6 +1,5 @@
 using CommunityToolkit.Maui.Markup;
 using Mapsui.Samples.Common;
-using Mapsui.Samples.Common.Maps.Widgets;
 using Mapsui.Samples.Maui.ViewModel;
 using Mapsui.UI.Maui;
 
@@ -21,14 +20,10 @@ public sealed class MainPage : ContentPage, IDisposable
         collectionView = CreateCollectionView(mainViewModel);
 
         BindingContext = mainViewModel;
-        mapControl.SetBinding(MapControl.MapProperty, new Binding(nameof(MainViewModel.Map)));
+        mapControl.Bind(MapControl.MapProperty, nameof(MainViewModel.Map));
 
         // Workaround. Samples need the MapControl in the current setup.
         mainViewModel.MapControl = mapControl;
-
-        // The CustomWidgetSkiaRenderer needs to be registered to make the CustomWidget sample work.
-        // Perhaps it is possible to let the sample itself do this so we do not have to do this for each platform.
-        mapControl.Renderer.WidgetRenders[typeof(CustomWidget)] = new CustomWidgetSkiaRenderer();
 
         Content = new Grid
         {

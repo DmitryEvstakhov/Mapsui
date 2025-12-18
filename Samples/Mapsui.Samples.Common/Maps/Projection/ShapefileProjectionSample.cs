@@ -19,7 +19,7 @@ public class ShapefileProjectionSample : ISample
         ShapeFilesDeployer.CopyEmbeddedResourceToFile("cities.shp");
     }
 
-    public string Name => "Shapefile with Projection";
+    public string Name => "ShapefileWithProjection";
     public string Category => "Projection";
 
     public Task<Map> CreateMapAsync() => Task.FromResult(CreateMap());
@@ -31,8 +31,6 @@ public class ShapefileProjectionSample : ISample
             CRS = "EPSG:3857", // The Map CRS needs to be set
         };
 
-#pragma warning disable IDISP001 // Dispose created
-#pragma warning disable IDISP004 // Don't ignore created IDisposable 
         var dotSpatialProjection = new DotSpatialProjection();
         var countriesPath = Path.Combine(ShapeFilesDeployer.ShapeFilesLocation, "countries.shp");
         var countrySource = new ShapeFile(countriesPath, true, true, dotSpatialProjection);
@@ -57,60 +55,48 @@ public class ShapefileProjectionSample : ISample
         return map;
     }
 
-    private static ILayer CreateCountryLayer(IProvider countrySource)
+    private static Layer CreateCountryLayer(IProvider countrySource) => new()
     {
-        return new Layer
-        {
-            Name = "Countries",
-            DataSource = countrySource,
-            Style = CreateCountryTheme()
-        };
-    }
+        Name = "Countries",
+        DataSource = countrySource,
+        Style = CreateCountryTheme()
+    };
 
-    private static ILayer CreateCityLayer(IProvider citySource)
+    private static Layer CreateCityLayer(IProvider citySource) => new()
     {
-        return new Layer
-        {
-            Name = "Cities",
-            DataSource = citySource,
-            Style = CreateCityTheme()
-        };
-    }
+        Name = "Cities",
+        DataSource = citySource,
+        Style = CreateCityTheme()
+    };
 
-    private static ILayer CreateCountryLabelLayer(IProvider countryProvider)
+    private static Layer CreateCountryLabelLayer(IProvider countryProvider) => new("Country labels")
     {
-        return new Layer("Country labels")
-        {
-            DataSource = countryProvider,
-            Enabled = true,
-            MaxVisible = double.MaxValue,
-            MinVisible = double.MinValue,
-            Style = CreateCountryLabelTheme()
-        };
-    }
+        DataSource = countryProvider,
+        Enabled = true,
+        MaxVisible = double.MaxValue,
+        MinVisible = double.MinValue,
+        Style = CreateCountryLabelTheme()
+    };
 
-    private static ILayer CreateCityLabelLayer(IProvider citiesProvider)
+    private static Layer CreateCityLabelLayer(IProvider citiesProvider) => new("City labels")
     {
-        return new Layer("City labels")
-        {
-            DataSource = citiesProvider,
-            Enabled = true,
-            Style = CreateCityLabelStyle()
-        };
-    }
+        DataSource = citiesProvider,
+        Enabled = true,
+        Style = CreateCityLabelStyle()
+    };
 
-    private static IThemeStyle CreateCityTheme()
+    private static GradientTheme CreateCityTheme()
     {
         // Scaling city icons based on city population.
         // Cities below 1.000.000 gets the smallest symbol.
         // Cities with more than 5.000.000 the largest symbol.
         var imageSource = "embedded://Mapsui.Samples.Common.Images.icon.png";
-        var cityMin = new SymbolStyle { ImageSource = imageSource, SymbolScale = 0.5f };
-        var cityMax = new SymbolStyle { ImageSource = imageSource, SymbolScale = 1f };
+        var cityMin = new ImageStyle { Image = imageSource, SymbolScale = 0.5f };
+        var cityMax = new ImageStyle { Image = imageSource, SymbolScale = 1f };
         return new GradientTheme("POPULATION", 1000000, 5000000, cityMin, cityMax);
     }
 
-    private static IThemeStyle CreateCountryTheme()
+    private static GradientTheme CreateCountryTheme()
     {
         // Set a gradient theme on the countries layer, based on Population density
         // First create two styles that specify min and max styles
@@ -124,21 +110,18 @@ public class ShapefileProjectionSample : ISample
         return new GradientTheme("POPDENS", 0, 400, min, max) { FillColorBlend = ColorBlend.Rainbow5 };
     }
 
-    private static LabelStyle CreateCityLabelStyle()
+    private static LabelStyle CreateCityLabelStyle() => new()
     {
-        return new LabelStyle
-        {
-            ForeColor = Color.Black,
-            BackColor = new Brush { Color = Color.Orange },
-            Font = new Font { FontFamily = "GenericSerif", Size = 11 },
-            HorizontalAlignment = LabelStyle.HorizontalAlignmentEnum.Center,
-            VerticalAlignment = LabelStyle.VerticalAlignmentEnum.Center,
-            Offset = new Offset { X = 0, Y = 0 },
-            Halo = new Pen { Color = Color.Yellow, Width = 2 },
-            CollisionDetection = true,
-            LabelColumn = "NAME"
-        };
-    }
+        ForeColor = Color.Black,
+        BackColor = new Brush { Color = Color.Orange },
+        Font = new Font { FontFamily = "GenericSerif", Size = 11 },
+        HorizontalAlignment = LabelStyle.HorizontalAlignmentEnum.Center,
+        VerticalAlignment = LabelStyle.VerticalAlignmentEnum.Center,
+        Offset = new Offset { X = 0, Y = 0 },
+        Halo = new Pen { Color = Color.Yellow, Width = 2 },
+        CollisionDetection = true,
+        LabelColumn = "NAME"
+    };
 
     private static GradientTheme CreateCountryLabelTheme()
     {

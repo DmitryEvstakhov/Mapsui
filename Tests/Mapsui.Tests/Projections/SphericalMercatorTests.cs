@@ -1,8 +1,6 @@
 ﻿using Mapsui.Projections;
 using Mapsui.Utilities;
 using NUnit.Framework;
-using NUnit.Framework.Legacy;
-
 namespace Mapsui.Tests.Projections;
 
 [TestFixture]
@@ -21,7 +19,7 @@ internal class SphericalMercatorTests
 
         // Assert
         var distanceInKilometer = Haversine.Distance(inLon, inLat, outLon, outLat);
-        var distanceInCentimer = distanceInKilometer * 100000;
-        ClassicAssert.Less(distanceInCentimer, 1);
+        var distanceInCentimeter = distanceInKilometer * 100000;
+        Assert.That(distanceInCentimeter, Is.LessThan(1));
     }
 }

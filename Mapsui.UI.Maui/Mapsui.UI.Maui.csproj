@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0</TargetFrameworks>
+    <TargetFrameworks>net9.0;net9.0-android</TargetFrameworks>
     <UseMaui>true</UseMaui>
     <SingleProject>true</SingleProject>
     <DefineConstants>__MAUI__</DefineConstants>
@@ -36,8 +36,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Maui.Controls" VersionOverride="$(MauiVersion)" />
-    <PackageReference Include="Microsoft.Maui.Controls.Compatibility" VersionOverride="$(MauiVersion)" />
+    <PackageReference Include="Microsoft.Maui.Controls" VersionOverride="$(MauiVersion)" />    
   </ItemGroup>
 
   <ItemGroup>

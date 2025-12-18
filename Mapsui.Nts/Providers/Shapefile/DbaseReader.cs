@@ -27,7 +27,6 @@ internal sealed class DbaseReader : IDisposable
         public Type DataType;
         public int Decimals;
         public int Length;
-        // ReSharper disable once NotAccessedField.Local
         public int Address;
     }
 
@@ -157,7 +156,6 @@ internal sealed class DbaseReader : IDisposable
         _headerIsParsed = true;
     }
 
-    // ReSharper disable once CyclomaticComplexity // It's a switch statement!
     private static Encoding GetDbaseLanguageDriver(byte dbasecode)
     {
         switch (dbasecode)
@@ -309,6 +307,7 @@ internal sealed class DbaseReader : IDisposable
     {
         var tab = new DataTable();
         // all of common, non "base-table" fields implemented
+#pragma warning disable IDISP004 // Don't ignore created IDisposable. Justification: The DataTable is returned to the caller.
         tab.Columns.Add("ColumnName", typeof(string));
         tab.Columns.Add("ColumnSize", typeof(int));
         tab.Columns.Add("ColumnOrdinal", typeof(int));

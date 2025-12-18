@@ -4,13 +4,13 @@
 
 // This file was originally created by Morten Nielsen (www.iter.dk) as part of SharpMap
 
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
 using Mapsui.Animations;
 using Mapsui.Fetcher;
 using Mapsui.Styles;
 using Mapsui.Widgets.ButtonWidgets;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
 
 namespace Mapsui.Layers;
 
@@ -93,9 +93,9 @@ public interface ILayer : IAnimatable, INotifyPropertyChanged, IDisposable
     IReadOnlyList<double> Resolutions { get; }
 
     /// <summary>
-    /// Indicates if the layer should be taken into account for the GetMapInfo request
+    /// Name of the custom layer renderer. Set this value if you want to use a custom renderer for this layer.
     /// </summary>
-    bool IsMapInfoLayer { get; set; }
+    string? CustomLayerRendererName { get; set; }
 
     /// <summary>
     /// Points that this layer is active and can be show on the canvas

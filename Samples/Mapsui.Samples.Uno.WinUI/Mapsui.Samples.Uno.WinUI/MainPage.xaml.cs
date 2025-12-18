@@ -4,7 +4,6 @@ using Mapsui.Samples.Common;
 using Mapsui.Samples.Common.Extensions;
 using Mapsui.Tiling;
 using RadioButton = Microsoft.UI.Xaml.Controls.RadioButton;
-using Mapsui.Samples.Common.Maps.Widgets;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -18,17 +17,17 @@ public sealed partial class MainPage : Page
 {
     static MainPage()
     {
-        Mapsui.Tests.Common.Samples.Register();
-        Mapsui.Samples.Common.Samples.Register();
+        Common.Samples.Register();
     }
 
     public MainPage()
     {
         InitializeComponent();
 
+        // Uncomment the line below to use the Experimental Skia renderer
+        // MapControl.SetMapRenderer(new Experimental.Rendering.Skia.MapRenderer());
         MapControl.Map.Layers.Add(OpenStreetMap.CreateTileLayer());
         MapControl.Map.Navigator.RotationLock = false;
-        MapControl.Renderer.WidgetRenders[typeof(CustomWidget)] = new CustomWidgetSkiaRenderer();
 
         CategoryComboBox.SelectionChanged += CategoryComboBoxSelectionChanged;
 
@@ -75,7 +74,7 @@ public sealed partial class MainPage : Page
             Margin = new Thickness(4)
         };
 
-        radioButton.Click += (s, a) =>
+        radioButton.Click += (s, e) =>
         {
             Catch.Exceptions(async () =>
             {

@@ -12,7 +12,7 @@ jobs:
   build:
 
     env:
-      SOLUTION: 'Mapsui.sln'
+      SOLUTION: 'Mapsui.Release.slnf'
 
     runs-on: windows-latest
 
@@ -20,7 +20,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
-        filter: tree:0    
+        filter: tree:0
     - uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
@@ -29,11 +29,12 @@ jobs:
     - name: Setup NuGet
       uses: NuGet/setup-nuget@v2
 
-    - name: Setup .NET SDK
+    - name: Setup .NET 9 SDK
       uses: actions/setup-dotnet@v4
       with:
          dotnet-version: |
-           9.0.x         
+           9.0.305
+           8.0.407
 
     # The version tag needs to be set before the release. If not if will fail on nuget publish.
     - name: Set VERSION_OF_RELEASE to last tag

@@ -14,7 +14,7 @@ namespace Mapsui.Samples.Common.Maps.DataFormats;
 public class WfsSample : ISample
 {
     public string Name => "WFS";
-    public string Category => "Data Formats";
+    public string Category => "DataFormats";
 
     private const string wfsUri = "https://geoservices1.civis.bz.it/geoserver/p_bz-AdministrativeUnits/ows";
     private const string crs = "EPSG:3857";  // originally: "EPSG:25832"
@@ -32,7 +32,7 @@ public class WfsSample : ISample
             map.Layers.Add(CreateWfsLayer(provider));
             map.Layers.Add(CreateLabelLayer(provider));
 
-            map.Widgets.Add(new MapInfoWidget(map));
+            map.Widgets.Add(new MapInfoWidget(map, (l) => Name == "Districts"));
 
             map.Navigator.CenterOnAndZoomTo(new MPoint(1270000.0, 5880000.0), map.Navigator.Resolutions[9]);
 
@@ -46,13 +46,16 @@ public class WfsSample : ISample
         }
     }
 
-    private static ILayer CreateWfsLayer(WFSProvider provider)
+    private static Layer CreateWfsLayer(WFSProvider provider)
     {
         return new Layer(layerName)
         {
-            Style = new VectorStyle { Fill = new Brush { Color = Color.FromArgb(192, 255, 0, 0) } },
+            Style = new VectorStyle()
+            {
+                Outline = new Pen(Color.Gray, 1f),
+                Fill = new Brush(Color.FromArgb(192, 255, 0, 0))
+            },
             DataSource = provider,
-            IsMapInfoLayer = true
         };
     }
 

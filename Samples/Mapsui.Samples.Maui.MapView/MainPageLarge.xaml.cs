@@ -1,20 +1,10 @@
 ﻿using Mapsui.Samples.Common;
 using Mapsui.Extensions;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Mapsui.Logging;
 using Mapsui.Samples.Common.Extensions;
-using Mapsui.Styles;
 using Mapsui.UI.Maui;
-using Microsoft.Maui.Controls;
-using Microsoft.Maui.Dispatching;
-using Microsoft.Maui.Devices.Sensors;
 using Mapsui.Manipulations;
-using Mapsui.Samples.Common.Maps.Widgets;
 
 namespace Mapsui.Samples.Maui;
 
@@ -22,13 +12,12 @@ public sealed partial class MainPageLarge : ContentPage, IDisposable
 {
     static MainPageLarge()
     {
-        Mapsui.Tests.Common.Samples.Register();
-        Mapsui.Samples.Common.Samples.Register();
-        Mapsui.Samples.Maui.MapView.Samples.Register();
+        Common.Samples.Register();
+        MapView.Samples.Register();
     }
 
     readonly IEnumerable<ISampleBase> _allSamples;
-    Func<object?, EventArgs, bool>? _clicker;
+    Func<object?, MapClickedEventArgs, bool>? _clicker;
     private CancellationTokenSource? _gpsCancelation;
     private bool _updateLocation;
 
@@ -59,7 +48,6 @@ public sealed partial class MainPageLarge : ContentPage, IDisposable
         mapView.IsNorthingButtonVisible = true;
 
         mapView.Info += MapView_Info;
-        mapView.Renderer.WidgetRenders[typeof(CustomWidget)] = new CustomWidgetSkiaRenderer();
 
         StartGPS();
     }
@@ -73,18 +61,13 @@ public sealed partial class MainPageLarge : ContentPage, IDisposable
     {
         featureInfo.Text = $"Click Info:";
 
-        if (e?.MapInfo?.Feature != null)
-        {
-            featureInfo.Text = $"Click Info:{Environment.NewLine}{e.MapInfo.Feature.ToDisplayText()}";
+        if (e is null)
+            return;
 
-            foreach (var style in e.MapInfo.Feature.Styles)
-            {
-                if (style is CalloutStyle)
-                {
-                    style.Enabled = !style.Enabled;
-                    e.Handled = true;
-                }
-            }
+        var mapInfo = e.GetMapInfo(mapView.MapInfoLayers);
+        if (mapInfo.Feature != null)
+        {
+            featureInfo.Text = $"Click Info:{Environment.NewLine}{mapInfo.Feature.ToDisplayText()}";
 
             mapView.RefreshGraphics();
         }
@@ -141,13 +124,13 @@ public sealed partial class MainPageLarge : ContentPage, IDisposable
     {
         if (e.Pin != null)
         {
-            if (e.TapType == TapType.Double)
+            if (e.GestureType == GestureType.DoubleTap)
             {
                 // Hide Pin when double click
                 //DisplayAlert($"Pin {e.Pin.Label}", $"Is at position {e.Pin.Position}", "Ok");
                 e.Pin.IsVisible = false;
             }
-            if (e.TapType == TapType.Single)
+            if (e.GestureType == GestureType.SingleTap)
                 if (e.Pin.Callout.IsVisible)
                     e.Pin.HideCallout();
                 else

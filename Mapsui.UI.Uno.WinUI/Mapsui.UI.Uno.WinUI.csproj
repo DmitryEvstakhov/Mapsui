@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Uno.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net8.0-ios;net8.0-maccatalyst;net8.0-android;net8.0-windows10.0.19041;net8.0-browserwasm;net8.0-desktop</TargetFrameworks>
+    <TargetFrameworks>net8.0;net8.0-android;net8.0-windows10.0.19041;net9.0;net9.0-ios;net9.0-maccatalyst;net9.0-android;net9.0-windows10.0.19041</TargetFrameworks>
     <UnoSingleProject>true</UnoSingleProject>
     <OutputType>Library</OutputType>
     <!-- Ensures the .xr.xml files are generated in a proper layout folder -->
@@ -19,8 +19,11 @@
       https://aka.platform.uno/singleproject-features
     -->
     <UnoFeatures>
+      Skia;
     </UnoFeatures>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 	</PropertyGroup>
+
 
   <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
     <!--
@@ -45,11 +48,11 @@
   </ItemGroup>
 
   <ItemGroup Condition="!$(TargetFramework.Contains('windows'))">
-    <PackageReference Include="SkiaSharp.Views.Uno.WinUI"/>
+    <PackageReference Include="SkiaSharp.Views.Uno.WinUI" />
   </ItemGroup>
 
   <ItemGroup Condition="$(TargetFramework.Contains('windows'))">
-    <PackageReference Include="SkiaSharp.Views.WinUI"/>
+    <PackageReference Include="SkiaSharp.Views.WinUI" />
   </ItemGroup>
 
   <ItemGroup>
@@ -62,6 +65,7 @@
     <Compile Include="..\Mapsui.UI.WinUI\Extensions\PointExtensions.cs" Link="Extensions\PointExtensions.cs" />
     <Compile Include="..\Mapsui.UI.WinUI\Extensions\PointerPointExtensions.cs" Link="Extensions\PointerPointExtensions.cs" />
     <Compile Include="..\Mapsui.UI.WinUI\MapControl.cs" Link="MapControl.cs" />
+    <Compile Include="..\Mapsui.UI.WinUI\RenderControl.cs" Link="RenderControl.cs" />
     <Compile Include="..\Mapsui.UI.WinUI\SKSwapChainPanel.cs" Link="SKSwapChainPanel.cs" />
   </ItemGroup>
 

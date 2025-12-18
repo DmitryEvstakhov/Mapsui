@@ -1,19 +1,51 @@
 ﻿using Mapsui.Extensions;
+using Mapsui.Layers;
 using Mapsui.Styles;
 using Mapsui.Widgets.BoxWidgets;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace Mapsui.Widgets.InfoWidgets;
+
 public class MapInfoWidget : TextBoxWidget
 {
     private readonly Map _map;
+    private readonly Func<IEnumerable<ILayer>> _layers;
 
-    public MapInfoWidget(Map map)
+    /// <summary>
+    /// Widget displaying information about the feature at the current mouse position
+    /// </summary>
+    /// <param name="map">The map that is queried.</param>
+    /// <param name="layers">The list of layers to filter.</param>
+    public MapInfoWidget(Map map, IEnumerable<ILayer> layers)
+        : this(map, () => layers)
+    {
+    }
+
+    /// <summary>
+    /// Widget displaying information about the feature at the current mouse position
+    /// </summary>
+    /// <param name="map">The map that is queried.</param>
+    /// <param name="layersFilter">The filter to select the layers to query. The advantage of a filter is that 
+    /// it can handle changes to the layer list later on.</param>
+    public MapInfoWidget(Map map, Func<ILayer, bool> layersFilter)
+        : this(map, () => map.Layers.Where(layersFilter))
+    {
+    }
+
+    /// <summary>
+    /// Widget displaying information about the feature at the current mouse position
+    /// </summary>
+    /// <param name="map">The map that is queried.</param>
+    /// <param name="getMapInfoLayers">The method to retrieve the layers to query.</param>
+    public MapInfoWidget(Map map, Func<IEnumerable<ILayer>> getMapInfoLayers)
     {
         // Todo: Avoid Map in the constructor. Perhaps the event args should have a GetMapInfoAsync method
         _map = map;
-        _map.Info += Map_Info;
+        _layers = getMapInfoLayers;
+        _map.Tapped += MapTapped;
 
         VerticalAlignment = VerticalAlignment.Bottom;
         HorizontalAlignment = HorizontalAlignment.Left;
@@ -24,24 +56,22 @@ public class MapInfoWidget : TextBoxWidget
         TextColor = Color.White;
     }
 
-    private void Map_Info(object? sender, MapInfoEventArgs a)
+    private void MapTapped(object? s, MapEventArgs e)
     {
-        Text = FeatureToText(a.MapInfo?.Feature);
+        var mapInfo = e.GetMapInfo(_layers());
+        Text = FeatureToText(mapInfo.Feature);
         _map.RefreshGraphics();
-        if (a.MapInfo != null)
+        // Try to load async data
+        Catch.Exceptions(async () =>
         {
-            // Try to load async data
-            Catch.Exceptions(async () =>
+            var info = await e.GetRemoteMapInfoAsync(_map.Layers.Where(t => t is ILayerFeatureInfo));
+            var featureText = FeatureToText(info.Feature);
+            if (!string.IsNullOrEmpty(featureText))
             {
-                var info = await a.MapInfo.GetMapInfoAsync();
-                var featureText = FeatureToText(info.Feature);
-                if (Text != featureText)
-                {
-                    Text = featureText;
-                    _map.RefreshGraphics();
-                }
-            });
-        }
+                Text = featureText;
+                _map.RefreshGraphics();
+            }
+        });
     }
 
     public Func<IFeature?, string> FeatureToText { get; set; } = (f) =>
@@ -50,10 +80,18 @@ public class MapInfoWidget : TextBoxWidget
 
         var result = new StringBuilder();
 
-        result.Append("Info: ");
+        result.Append("MapInfo: ");
         foreach (var field in f.Fields)
-            result.Append($"{field}: {f[field]} - ");
+            result.Append($"{field}: {f[field]} | ");
+        result.Append($"{GetCoordinateString(f)}");
         result.Remove(result.Length - 2, 2);
         return result.ToString();
     };
+
+    private static string GetCoordinateString(IFeature f)
+    {
+        var builder = new StringBuilder();
+        f.CoordinateVisitor((x, y, setter) => builder.Append($"{x.ToString("f2")} {y.ToString("f2")} | ")); ;
+        return builder.ToString();
+    }
 }

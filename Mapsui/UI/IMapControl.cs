@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using Mapsui.Layers;
 using Mapsui.Manipulations;
 using Mapsui.Rendering;
-using Mapsui.Utilities;
 
 namespace Mapsui.UI;
 
@@ -21,35 +20,43 @@ public interface IMapControl : IDisposable
 
     void Unsubscribe();
 
-    IRenderer Renderer { get; }
-
     void OpenInBrowser(string url);  // Todo: Perhaps remove. This is only to force the platform specific implementation
 
     /// <summary>
-    /// The number of pixel per device independent unit
+    /// Returns the number of pixels per device independent unit
     /// </summary>
-    float PixelDensity { get; }
+    float? GetPixelDensity();
 
     /// <summary>
-    /// Converts coordinates in pixels to device independent units (or DIP or DP).
+    /// Converts coordinates in raw pixels to device independent units (or DIP or DP).
     /// </summary>
     /// <param name="coordinateInPixels">Coordinate in pixels</param>
     /// <returns>Coordinate in device independent units (or DIP or DP)</returns>
-    MPoint ToDeviceIndependentUnits(MPoint coordinateInPixels);
+    MPoint ToCoordinateInDeviceIndependentUnits(MPoint coordinateInPixels)
+    {
+        var pixelDensity = GetPixelDensity() ?? throw new InvalidOperationException("Pixel density is not known yet.");
+        return new MPoint(coordinateInPixels.X / pixelDensity, coordinateInPixels.Y / pixelDensity);
+    }
 
     /// <summary>
-    /// Converts coordinates in device independent units (or DIP or DP) to pixels.
+    /// Converts coordinates in device independent units (or DIP or DP) to raw pixels.
     /// </summary>
     /// <param name="coordinateInDeviceIndependentUnits">Coordinate in device independent units (or DIP or DP)</param>
-    /// <returns>Coordinate in pixels</returns>
-    MPoint ToPixels(MPoint coordinateInDeviceIndependentUnits);
+    /// <returns>Coordinate in raw pixels</returns>
+    MPoint ToCoordinateInRawPixels(MPoint coordinateInDeviceIndependentUnits)
+    {
+        var pixelDensity = GetPixelDensity() ?? throw new InvalidOperationException("Pixel density is not known yet.");
+        return new MPoint(
+            coordinateInDeviceIndependentUnits.X * pixelDensity,
+            coordinateInDeviceIndependentUnits.Y * pixelDensity);
+    }
 
     /// <summary>
-    /// Check, if a feature at a given screen position is hit
+    /// Check, if a feature at a given screen position is hit.
     /// </summary>
-    /// <param name="screenPosition">Screen position to check for widgets and features</param>
-    /// <param name="margin">An optional extra margin around the feature to enlarge the hit area.</param>
-    MapInfo GetMapInfo(ScreenPosition screenPosition, int margin = 0);
+    /// <param name="screenPosition">Screen position to check for widgets and features.</param>
+    /// <param name="layers">The layers to query.</param>
+    MapInfo GetMapInfo(ScreenPosition screenPosition, IEnumerable<ILayer> layers);
 
     /// <summary>
     /// Create a snapshot form map as PNG image
@@ -60,5 +67,5 @@ public interface IMapControl : IDisposable
     /// <returns>Byte array with snapshot in png format. If there are any problems than returns null.</returns>
     byte[] GetSnapshot(IEnumerable<ILayer>? layers = null, RenderFormat renderFormat = RenderFormat.Png, int quality = 100);
 
-    Performance? Performance { get; set; }
+    void InvalidateCanvas();
 }

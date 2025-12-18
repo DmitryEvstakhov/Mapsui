@@ -1,8 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0</TargetFrameworks>
-    <description>Mapsui - Library for mapping Extensions</description>
+    <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    <Description>Mapsui - Library for mapping Extensions</Description>
     <PackageTags>$(PackageTags) arcgis geotiff cache projection</PackageTags>
 		<IsPackable>true</IsPackable>
   </PropertyGroup>
@@ -16,8 +16,10 @@
     <PackageReference Include="BruTile" />
     <PackageReference Include="BitMiracle.LibTiff.NET" />
     <PackageReference Include="SkiaSharp" />
-    <PackageReference Include="sqlite-net-pcl" />
-    <PackageReference Include="SQLitePCLRaw.bundle_green" />
+    <PackageReference Include="sqlite-net-base" />
+    <PackageReference Include="SQLitePCLRaw.config.e_sqlite3" />
+    <PackageReference Include="SQLitePCLRaw.core" />
+    <PackageReference Include="SourceGear.sqlite3" />
     <PackageReference Include="DotSpatial.Projections" />
   </ItemGroup>
 

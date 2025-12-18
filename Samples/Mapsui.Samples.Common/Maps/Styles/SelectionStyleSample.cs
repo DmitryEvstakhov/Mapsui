@@ -12,71 +12,59 @@ namespace Mapsui.Samples.Common.Maps.Styles;
 
 internal class SelectionStyleSample : ISample
 {
-    public string Name => "Selection";
+    public string Name => "SelectFeature";
     public string Category => "Styles";
 
-    public Task<Map> CreateMapAsync()
+    public Task<Map> CreateMapAsync() => Task.FromResult(CreateMap());
+
+    private static Map CreateMap()
     {
         var map = new Map();
         map.Layers.Add(OpenStreetMap.CreateTileLayer());
         map.Layers.Add(CreatePointLayer());
-        map.Info += (s, a) => SelectionStyleSample.ToggleSelected(a.MapInfo?.Feature);
-
-        map.Widgets.Add(new MapInfoWidget(map));
-
-        return Task.FromResult(map);
+        map.Widgets.Add(new MapInfoWidget(map, l => l.Name == "Points"));
+        map.Tapped += MapTapped;
+        return map;
     }
 
-    private static void ToggleSelected(IFeature? feature)
+    private static void MapTapped(object? s, MapEventArgs e)
     {
-        if (feature is null) return;
-        if (feature["selected"] is null) feature["selected"] = "true";
-        else feature["selected"] = null;
+        var feature = e.GetMapInfo(e.Map.Layers.Where(l => l.Name == "Points")).Feature;
+        if (feature is null)
+            return;
+
+        if (feature.Data is SomeModel featureData)
+            featureData.IsSelected = !featureData.IsSelected;
+
+        e.Handled = true;
     }
 
-    public static ILayer CreatePointLayer()
+    public static ILayer CreatePointLayer() => new Layer("Points")
     {
-        return new Layer("Points")
+        DataSource = new MemoryProvider(CreatePoints().Select(p => new PointFeature(p) { Data = new SomeModel() })),
+        Style = CreateStyle(),
+    };
+
+    private static ThemeStyle CreateStyle() => new(static f =>
+    {
+        var selected = (f.Data as SomeModel)?.IsSelected ?? false;
+        return new StyleCollection
         {
-            DataSource = new MemoryProvider(CreatePoints().Select(p => new PointFeature(p))),
-            Style = CreateStyle(),
-            IsMapInfoLayer = true
+            Styles =
+            {
+                CreateSelectionSymbol(selected),
+                CreateSymbol()
+            }
         };
-    }
+    });
 
-    private static IStyle CreateStyle()
-    {
-        return new ThemeStyle(f =>
-        {
-            if (f["selected"]?.ToString() == "true")
+    private static SymbolStyle CreateSelectionSymbol(bool enabled) =>
+        new() { Fill = new Brush(Color.White), SymbolScale = 1.4, Enabled = enabled, Outline = null, Opacity = 0.8f };
 
-                return new StyleCollection
-                {
-                    Styles = {
-                    // With the StyleCollection you can use the same symbol as when not selected but 
-                    // put something in the background to indicate it is selected.
-                    CreateSelectionSymbol(),
-                    CreateSymbol()
-                    }
-                };
+    private static SymbolStyle CreateSymbol() =>
+        new() { Fill = new Brush(new Color(150, 150, 30)) };
 
-            return CreateSymbol();
-        });
-    }
-
-    private static SymbolStyle CreateSelectionSymbol()
-    {
-        return new SymbolStyle { Fill = new Brush(Color.Orange), SymbolScale = 1.2 };
-    }
-
-    private static SymbolStyle CreateSymbol()
-    {
-        return new SymbolStyle { Fill = new Brush(new Color(150, 150, 30)) };
-    }
-
-    private static MPoint[] CreatePoints()
-    {
-        return new[] {
+    private static MPoint[] CreatePoints() => [
         new MPoint(0, 0),
         new MPoint(9000000, 0),
         new MPoint(9000000, 9000000),
@@ -84,6 +72,11 @@ internal class SelectionStyleSample : ISample
         new MPoint(-9000000, 0),
         new MPoint(-9000000, -9000000),
         new MPoint(0, -9000000),
-    };
+    ];
+
+    // This could be some class in your own app domain that you want to visualize in Mapsui.
+    private record SomeModel()
+    {
+        public bool IsSelected { get; set; }
     }
 }

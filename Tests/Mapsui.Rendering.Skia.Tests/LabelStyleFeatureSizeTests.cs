@@ -1,7 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
 using Mapsui.Layers;
-using Mapsui.Rendering.Skia.Cache;
 using Mapsui.Styles;
 using Mapsui.Utilities;
 using NUnit.Framework;
@@ -14,14 +13,14 @@ namespace Mapsui.Rendering.Skia.Tests;
 public class LabelStyleFeatureSizeTests
 {
     // The Sizes are different on MacOs and Windows
-    const double labelSizeOnMac = 42.642578125d;
-    const double labelSizeOnWindows = 40.642578125d;
-    const double labelSizeOnLinux = 41.181640625d;
+    const double _labelSizeOnMac = 42.642578125d;
+    const double _labelSizeOnWindows = 40.642578125d;
+    const double _labelSizeOnLinux = 41d;
     public readonly double LabelSize = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-        ? labelSizeOnWindows
+        ? _labelSizeOnWindows
         : RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-            ? labelSizeOnLinux
-            : labelSizeOnMac;
+            ? _labelSizeOnLinux
+            : _labelSizeOnMac;
 
     [Test]
     public void DefaultSizeFeatureSize()
@@ -77,8 +76,10 @@ public class LabelStyleFeatureSizeTests
         using var renderService = new RenderService();
         var size = LabelStyleRenderer.FeatureSize(feature, labelStyle, renderService);
 
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             Assert.That(size, Is.EqualTo(LabelSize * 2 - 1).Within(Constants.Epsilon));
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            Assert.That(size, Is.EqualTo(LabelSize * 2).Within(Constants.Epsilon));
         else
             // on macos it is not two times as big but almost two times with 3 less
             Assert.That(size, Is.EqualTo(LabelSize * 2 - 3).Within(Constants.Epsilon));
@@ -116,7 +117,6 @@ public class LabelStyleFeatureSizeTests
 
         using var renderService = new RenderService();
         var size = LabelStyleRenderer.FeatureSize(feature, labelStyle, renderService);
-
 
         Assert.That(size, Is.EqualTo(LabelSize + 2 * 2).Within(Constants.Epsilon));
     }

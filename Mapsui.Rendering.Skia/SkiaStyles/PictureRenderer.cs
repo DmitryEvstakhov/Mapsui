@@ -10,7 +10,7 @@ internal class PictureRenderer
 {
     // The field below is static for performance. Effect has not been measured.
     // Note that setting the FilterQuality to Low increases the quality because the default is None.
-    private static readonly SKPaint DefaultPaint = new() { FilterQuality = SKFilterQuality.Low };
+    private static readonly SKPaint DefaultPaint = new();
 
     [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created")]
     public static void Draw(SKCanvas canvas, SKPicture picture, SKRect rect, float layerOpacity = 1f, Color? blendModeColor = null)
@@ -30,7 +30,7 @@ internal class PictureRenderer
             matrix = SKMatrix.CreateScaleTranslation(scaleX, scaleY, rect.Left, rect.Top);
         }
 
-        canvas.DrawPicture(picture, ref matrix, skPaint);
+        canvas.DrawPicture(picture, in matrix, skPaint);
         if (dispose)
         {
             skPaint.Dispose();
@@ -70,6 +70,7 @@ internal class PictureRenderer
 
         canvas.Restore();
     }
+
     private static float DetermineHorizontalAlignmentCorrection(
         LabelStyle.HorizontalAlignmentEnum horizontalAlignment, float width)
     {
@@ -96,10 +97,9 @@ internal class PictureRenderer
             dispose = true;
             return new SKPaint
             {
-                FilterQuality = SKFilterQuality.Low,
                 ColorFilter = SKColorFilter.CreateBlendMode(blendModeColor.ToSkia(layerOpacity), SKBlendMode.SrcIn)
             };
-        };
+        }
 
         if (Math.Abs(layerOpacity - 1) > Utilities.Constants.Epsilon)
         {
@@ -108,10 +108,9 @@ internal class PictureRenderer
             dispose = true;
             return new SKPaint
             {
-                FilterQuality = SKFilterQuality.Low,
                 Color = new SKColor(255, 255, 255, (byte)(255 * layerOpacity))
             };
-        };
+        }
 
         dispose = false;
         return DefaultPaint;

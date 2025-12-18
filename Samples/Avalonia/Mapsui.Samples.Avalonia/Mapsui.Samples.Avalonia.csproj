@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-		<TargetFramework>net8.0</TargetFramework>
+		<TargetFrameworks>net8.0;net9.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
@@ -23,7 +23,7 @@
     <ProjectReference Include="..\..\..\Mapsui.Rendering.Skia\Mapsui.Rendering.Skia.csproj" />
     <ProjectReference Include="..\..\..\Mapsui.UI.Avalonia\Mapsui.UI.Avalonia.csproj" />
     <ProjectReference Include="..\..\..\Mapsui\Mapsui.csproj" />
-    <ProjectReference Include="..\..\..\Tests\Mapsui.Tests.Common\Mapsui.Tests.Common.csproj" />
+    <ProjectReference Include="..\..\..\Samples\Mapsui.Samples.Common\Mapsui.Samples.Common.csproj" />
     <ProjectReference Include="..\..\Mapsui.Samples.Common\Mapsui.Samples.Common.csproj" />
   </ItemGroup>
 

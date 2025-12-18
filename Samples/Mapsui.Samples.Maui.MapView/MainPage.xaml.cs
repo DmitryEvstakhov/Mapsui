@@ -1,8 +1,5 @@
-﻿using Microsoft.Maui.Controls;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using Mapsui.Samples.Common;
+﻿using Mapsui.Samples.Common;
+using Mapsui.UI.Maui;
 
 #pragma warning disable IDISP004 // Don't ignore created IDisposable
 
@@ -12,13 +9,12 @@ public partial class MainPage : ContentPage
 {
     static MainPage()
     {
-        Mapsui.Tests.Common.Samples.Register();
-        Mapsui.Samples.Common.Samples.Register();
-        Mapsui.Samples.Maui.MapView.Samples.Register();
+        Common.Samples.Register();
+        MapView.Samples.Register();
     }
 
     readonly IEnumerable<ISampleBase> allSamples;
-    Func<object?, EventArgs, bool>? clicker;
+    Func<object?, MapClickedEventArgs, bool>? clicker;
 
     public MainPage()
     {
@@ -61,7 +57,7 @@ public partial class MainPage : ContentPage
             clicker = formsSample.OnTap;
 
         if (sample != null)
-            (Application.Current?.MainPage as NavigationPage)?.PushAsync(new MapPage(sample, clicker));
+            Navigation.PushAsync(new MapPage(sample, clicker));
 
         listView.SelectedItem = null;
     }

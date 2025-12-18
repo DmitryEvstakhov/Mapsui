@@ -759,7 +759,6 @@ public class ShapeFile : IProvider, IDisposable, IProviderExtended
     /// <remarks><see cref="FilterDelegate">Filtering</see> is not applied to this method</remarks>
     /// <param name="oid">Object ID</param>
     /// <returns>geometry</returns>
-    // ReSharper disable once CyclomaticComplexity // Fix when changes need to be made here
     private Geometry? ReadGeometry(uint oid)
     {
         if (_brShapeFile is null) return null;
@@ -781,7 +780,7 @@ public class ShapeFile : IProvider, IDisposable, IProviderExtended
             for (var i = 0; i < nPoints; i++)
                 points.Add(new Point(_brShapeFile.ReadDouble(), _brShapeFile.ReadDouble()));
 
-            return new MultiPoint([.. points]);
+            return new MultiPoint(points.ToArray());
         }
         if (_shapeType == ShapeType.PolyLine || _shapeType == ShapeType.Polygon ||
             _shapeType == ShapeType.PolyLineM || _shapeType == ShapeType.PolygonM ||
@@ -809,11 +808,11 @@ public class ShapeFile : IProvider, IDisposable, IProviderExtended
                     var coordinates = new List<Coordinate>();
                     for (var i = segments[lineId]; i < segments[lineId + 1]; i++)
                         coordinates.Add(new Coordinate(_brShapeFile.ReadDouble(), _brShapeFile.ReadDouble()));
-                    lineStrings.Add(new LineString([.. coordinates]));
+                    lineStrings.Add(new LineString(coordinates.ToArray()));
                 }
                 if (lineStrings.Count == 1)
                     return lineStrings[0];
-                return new MultiLineString([.. lineStrings]);
+                return new MultiLineString(lineStrings.ToArray());
             }
             else
             {
@@ -824,7 +823,7 @@ public class ShapeFile : IProvider, IDisposable, IProviderExtended
                     var ring = new List<Coordinate>();
                     for (var i = segments[ringId]; i < segments[ringId + 1]; i++)
                         ring.Add(new Coordinate(_brShapeFile.ReadDouble(), _brShapeFile.ReadDouble()));
-                    rings.Add(new LinearRing([.. ring]));
+                    rings.Add(new LinearRing(ring.ToArray()));
                 }
                 var isCounterClockWise = new bool[rings.Count];
                 var polygonCount = 0;
@@ -858,7 +857,7 @@ public class ShapeFile : IProvider, IDisposable, IProviderExtended
                     var p = CreatePolygon(linearRings);
                     if (p is not null) polygons.Add(p);
 
-                    return new MultiPolygon([.. polygons]);
+                    return new MultiPolygon(polygons.ToArray());
                 }
             }
         }

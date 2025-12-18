@@ -15,8 +15,7 @@ public class MainForm : Form
 {
     static MainForm()
     {
-        Mapsui.Tests.Common.Samples.Register();
-        Mapsui.Samples.Common.Samples.Register();
+        Common.Samples.Register();
     }
 
     DropDown CategoryComboBox = new() { Width = 200 };
@@ -83,8 +82,7 @@ public class MainForm : Form
     }
     private void FillComboBoxWithCategories()
     {
-        Mapsui.Tests.Common.Samples.Register();
-        Mapsui.Samples.Common.Samples.Register();
+        Common.Samples.Register();
 
         var categories = AllSamples.GetSamples().Select(s => s.Category).Distinct().OrderBy(c => c);
         foreach (var category in categories)
@@ -102,7 +100,7 @@ public class MainForm : Form
             Text = sample.Name,
         };
 
-        radioButton.CheckedChanged += (s, a) =>
+        radioButton.CheckedChanged += (s, e) =>
         {
             Catch.Exceptions(async () =>
             {

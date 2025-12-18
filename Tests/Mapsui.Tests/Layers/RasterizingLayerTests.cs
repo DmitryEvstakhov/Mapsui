@@ -1,18 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
+using System.Threading.Tasks;
 using BruTile.Predefined;
 using Mapsui.Layers;
 using Mapsui.Nts;
 using Mapsui.Providers;
 using Mapsui.Rendering;
 using Mapsui.Rendering.Skia;
-using Mapsui.Tests.Common.TestTools;
 using Mapsui.Tiling.Extensions;
 using NetTopologySuite.Geometries;
 using NUnit.Framework;
-using NUnit.Framework.Legacy;
 
 namespace Mapsui.Tests.Layers;
 
@@ -20,7 +18,7 @@ namespace Mapsui.Tests.Layers;
 public class RasterizingLayerTests
 {
     [Test]
-    public void TestTimer()
+    public async Task TestFeatureFetchAsync()
     {
         // arrange
         DefaultRendererFactory.Create = () => new MapRenderer();
@@ -29,26 +27,28 @@ public class RasterizingLayerTests
         var schema = new GlobalSphericalMercator();
         var box = schema.Extent.ToMRect();
         var resolution = schema.Resolutions.First().Value.UnitsPerPixel;
-        using var waitHandle = new AutoResetEvent(false);
 
-        ClassicAssert.AreEqual(0, layer.GetFeatures(box, resolution).Count());
-        layer.DataChanged += (_, _) =>
-        {
-            // assert
-            waitHandle.Set();
-        };
-
+        Assert.That(layer.GetFeatures(box, resolution).Count(), Is.EqualTo(0));
         var fetchInfo = new FetchInfo(new MSection(box, resolution), null, ChangeType.Discrete);
 
         // act
-        layer.RefreshData(fetchInfo);
+        layer.ViewportChanged(fetchInfo);
+        var fetchJobs = layer.GetFetchJobs(0, 8);
+        foreach (var fetchJob in fetchJobs)
+        {
+            // This will trigger the DataChanged event
+            await fetchJob.FetchFunc();
+        }
 
         // assert
-        waitHandle.WaitOne();
-        ClassicAssert.AreEqual(layer.GetFeatures(box, resolution).Count(), 1);
+        var features = layer.GetFeatures(box, resolution);
+        Assert.That(features.Count(), Is.EqualTo(1));
+        Assert.That(features.First(), Is.TypeOf<RasterFeature>());
+        var rasterFeature = features.OfType<RasterFeature>().First();
+        Assert.That(rasterFeature.Raster!.Data.Length, Is.EqualTo(5354));
     }
 
-    private static TestLayer CreatePointLayer()
+    private static Layer CreatePointLayer()
     {
         var random = new Random(3);
         var features = new List<IFeature>();
@@ -57,6 +57,6 @@ public class RasterizingLayerTests
             features.Add(new GeometryFeature(
                 new Point(random.Next(100000, 5000000), random.Next(100000, 5000000))));
         }
-        return new TestLayer() { DataSource = new MemoryProvider(features) };
+        return new Layer() { DataSource = new MemoryProvider(features) };
     }
 }

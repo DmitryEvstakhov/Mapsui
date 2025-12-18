@@ -10,8 +10,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Timers;
 using Mapsui.Tiling;
-
-#pragma warning disable IDISP004 // Don't ignore created IDisposable
+using Mapsui.Tiling.Layers;
 
 namespace Mapsui.Samples.Common.Maps.Geometries;
 
@@ -19,7 +18,7 @@ public sealed class ManyMutatingLayersSample : ISample, IDisposable
 {
     private bool _disposed;
 
-    public string Name => "Many Mutating Layers";
+    public string Name => "ManyMutatingLayers";
     public string Category => "Performance";
 
     private readonly Random _random = new(123);
@@ -42,7 +41,7 @@ public sealed class ManyMutatingLayersSample : ISample, IDisposable
         map.Layers.Add(CreatePointLayers(_random, features).ToArray());
         map.Navigator.ZoomToBox(map.Layers.Get(0).Extent);
 
-        map.Widgets.Add(new MapInfoWidget(map));
+        map.Widgets.Add(new MapInfoWidget(map, l => l is not TileLayer));
 
         InitializeTimer(_timer1, map, features);
         InitializeTimer(_timer2, map, features);
@@ -62,7 +61,7 @@ public sealed class ManyMutatingLayersSample : ISample, IDisposable
     private void InitializeTimer(Timer timer, Map map, IEnumerable<PointFeature> features)
     {
         var random = new Random(38445);
-        timer.Elapsed += (sender, args) => MutateFeatures(features, () => map.Refresh());
+        timer.Elapsed += (s, e) => MutateFeatures(features, () => map.Refresh());
         timer.Start();
     }
 
@@ -92,7 +91,6 @@ public sealed class ManyMutatingLayersSample : ISample, IDisposable
             Enabled = true,
             Name = $"Layer {i}",
             DataSource = CreateMemoryProvider(features),
-            IsMapInfoLayer = true,
             Style = new SymbolStyle
             {
                 SymbolType = SymbolType.Ellipse,

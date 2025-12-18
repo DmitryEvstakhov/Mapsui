@@ -7,38 +7,25 @@ using Mapsui.Widgets.InfoWidgets;
 using System.Net;
 using System.Threading.Tasks;
 
-#pragma warning disable IDISP001 // Dispose created
-
 namespace Mapsui.Samples.Common.Maps.DataFormats;
 
 public class Wfs2_0Sample : ISample
 {
-    public string Name => "WFS 2.0";
+    public string Name => "WFS2.0";
     public string Category => "WFS";
 
-    private const string crs = "EPSG:31254";
+    private const string _crs = "EPSG:31254";
 
     public async Task<Map> CreateMapAsync()
     {
         try
         {
-            var map = new Map { CRS = crs };
+            var map = new Map { CRS = _crs };
             var provider = await CreateWfsProviderAsync();
             map.Layers.Add(CreateWfsLayer(provider));
-
-            map.Widgets.Add(new MapInfoWidget(map));
-
-            MRect bbox = new(
-                -34900
-                , 255900
-                , -34800
-                , 256000
-            );
-
-            map.Navigator.OverridePanBounds = bbox;
-            map.Navigator.PanLock = true;
+            map.Widgets.Add(new MapInfoWidget(map, l => l.Name == "Laser Points"));
+            map.Navigator.OverridePanBounds = new(-34900, 255800, -34700, 256000);
             map.Navigator.ZoomToPanBounds();
-
             return map;
 
         }
@@ -53,9 +40,13 @@ public class Wfs2_0Sample : ISample
     {
         return new Layer("Laser Points")
         {
-            Style = new SymbolStyle { Fill = new Brush(Color.Red), SymbolScale = 1 },
+            Style = new SymbolStyle()
+            {
+                Outline = new Pen(Color.Gray, 1f),
+                Fill = new Brush(Color.Red),
+                SymbolScale = 1
+            },
             DataSource = provider,
-            IsMapInfoLayer = true,
         };
     }
 
@@ -68,7 +59,7 @@ public class Wfs2_0Sample : ISample
             WFSProvider.WFSVersionEnum.WFS_2_0_0);
 
         provider.GetFeatureGetRequest = true;
-        provider.CRS = crs;
+        provider.CRS = _crs;
         provider.AxisOrder = [0, 1];
 
         await provider.InitAsync();

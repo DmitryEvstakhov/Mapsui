@@ -12,7 +12,8 @@ namespace Mapsui.Samples.Common.Maps.Styles;
 
 public class SvgSample : ISample
 {
-    public string Name => "Svg";
+    private static readonly int _numberOfSvgs = 2000;
+    public string Name => $"Many SVGs ({_numberOfSvgs})";
     public string Category => "Styles";
 
     public Task<Map> CreateMapAsync()
@@ -22,23 +23,19 @@ public class SvgSample : ISample
         map.Layers.Add(OpenStreetMap.CreateTileLayer());
         map.Layers.Add(CreateSvgLayer(map.Extent));
 
-        map.Widgets.Add(new MapInfoWidget(map));
+        map.Widgets.Add(new MapInfoWidget(map, l => l.Name == "Svg Layer"));
 
         return Task.FromResult(map);
     }
 
-    private static ILayer CreateSvgLayer(MRect? envelope)
+    private static MemoryLayer CreateSvgLayer(MRect? envelope) => new()
     {
-        return new MemoryLayer
-        {
-            Name = "Svg Layer",
-            Features = CreateSvgFeatures(RandomPointsBuilder.GenerateRandomPoints(envelope, 2000)),
-            Style = null,
-            IsMapInfoLayer = true
-        };
-    }
+        Name = "Svg Layer",
+        Features = CreateSvgFeatures(RandomPointsBuilder.GenerateRandomPoints(envelope, _numberOfSvgs)),
+        Style = null,
+    };
 
-    private static IEnumerable<IFeature> CreateSvgFeatures(IEnumerable<MPoint> randomPoints)
+    private static IFeature[] CreateSvgFeatures(IEnumerable<MPoint> randomPoints)
     {
         var counter = 0;
 
@@ -48,13 +45,13 @@ public class SvgSample : ISample
             feature.Styles.Add(CreateSvgStyle());
             counter++;
             return feature;
-        });
+        }).ToArray();
     }
 
-    private static SymbolStyle CreateSvgStyle() => new()
+    private static ImageStyle CreateSvgStyle() => new()
     {
-        ImageSource = "embedded://Mapsui.Samples.Common.Images.Pin.svg",
+        Image = "embedded://Mapsui.Samples.Common.Images.Pin.svg",
         SymbolScale = 0.5,
-        SymbolOffset = new RelativeOffset(0.0, 0.5)
+        RelativeOffset = new RelativeOffset(0.0, 0.5)
     };
 }

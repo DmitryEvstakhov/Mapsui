@@ -1,5 +1,5 @@
-﻿using System.Collections.Generic;
-using System.Linq;
+﻿using System.Linq;
+using System.Threading.Tasks;
 using Mapsui.Extensions;
 using Mapsui.Layers;
 using Mapsui.Nts;
@@ -8,37 +8,35 @@ using Mapsui.Nts.Widgets;
 using Mapsui.Styles;
 using Mapsui.Styles.Thematics;
 using Mapsui.Tiling;
-using Mapsui.UI;
 using Mapsui.Widgets;
 using Mapsui.Widgets.BoxWidgets;
 using Mapsui.Widgets.ButtonWidgets;
 using Mapsui.Widgets.InfoWidgets;
 using NetTopologySuite.IO;
 
-#pragma warning disable IDISP001 // Dispose created
-
 namespace Mapsui.Samples.Common.Maps.Editing;
 
-public class EditingSample : IMapControlSample
+public class EditingSample : ISample
 {
-    private EditManager _editManager = new();
+    private EditingWidget? _editingWidget;
     private WritableLayer? _targetLayer;
-    private IMapControl? _mapControl;
-    private List<IFeature>? _tempFeatures;
+    private IFeature[]? _tempFeatures;
 
     public string Name => "Editing";
     public string Category => "Editing";
-    public void Setup(IMapControl mapControl)
+
+    public Task<Map> CreateMapAsync() => Task.FromResult(CreateMap());
+
+    private Map CreateMap()
     {
-        _editManager = InitEditMode(mapControl, EditMode.Modify);
-        mapControl.Map.Navigator.ZoomToBox(_editManager.GetGrownExtent());
-        InitEditWidgets(mapControl.Map);
-        _mapControl = mapControl;
+        var map = CreateMap(EditMode.Modify);
+        _editingWidget = map.Widgets.OfType<EditingWidget>().Single();
+        InitEditWidgets(map);
+        return map;
     }
 
-    public static EditManager InitEditMode(IMapControl mapControl, EditMode editMode)
+    public static void InitEditMode(EditMode editMode, Map map)
     {
-        var map = CreateMap();
         var editManager = new EditManager
         {
             Layer = (WritableLayer)map.Layers.First(l => l.Name == "EditLayer")
@@ -51,9 +49,7 @@ public class EditingSample : IMapControlSample
 
         editManager.EditMode = editMode;
 
-        map.Widgets.Add(new EditingWidget(mapControl, editManager));
-        mapControl.Map = map;
-        return editManager;
+        map.Widgets.Add(new EditingWidget(editManager));
     }
 
     private void InitEditWidgets(Map map)
@@ -111,17 +107,16 @@ public class EditingSample : IMapControlSample
         VerticalAlignment = VerticalAlignment.Absolute,
         Text = "Delete",
         BackColor = Color.LightGray,
-        Tapped = (_, e) =>
+        WithTappedEvent = (_, e) =>
         {
-            if (_editManager.SelectMode)
+            if (_editingWidget?.SelectMode == true)
             {
-                var selectedFeatures = _editManager.Layer?.GetFeatures().Where(f => (bool?)f["Selected"] == true) ?? [];
+                var selectedFeatures = _editingWidget.Layer?.GetFeatures().Where(f => (bool?)f["Selected"] == true) ?? [];
                 foreach (var selectedFeature in selectedFeatures)
-                    _editManager.Layer?.TryRemove(selectedFeature);
-                _mapControl?.RefreshGraphics();
+                    _editingWidget.Layer?.TryRemove(selectedFeature);
+                e.Map.RefreshGraphics();
             }
-
-            return true;
+            e.Handled = true;
         }
     };
 
@@ -135,10 +130,10 @@ public class EditingSample : IMapControlSample
         VerticalAlignment = VerticalAlignment.Absolute,
         Text = "Select (for delete)",
         BackColor = Color.LightGray,
-        Tapped = (_, e) =>
+        WithTappedEvent = (_, e) =>
         {
-            _editManager.SelectMode = !_editManager.SelectMode;
-            return true;
+            _editingWidget!.SelectMode = !_editingWidget.SelectMode;
+            e.Handled = true;
         }
     };
 
@@ -152,10 +147,10 @@ public class EditingSample : IMapControlSample
         VerticalAlignment = VerticalAlignment.Absolute,
         Text = "None",
         BackColor = Color.LightGray,
-        Tapped = (_, e) =>
+        WithTappedEvent = (s, e) =>
         {
-            _editManager.EditMode = EditMode.None;
-            return true;
+            _editingWidget!.EditMode = EditMode.None;
+            e.Handled = true;
         }
     };
 
@@ -169,10 +164,10 @@ public class EditingSample : IMapControlSample
         VerticalAlignment = VerticalAlignment.Absolute,
         Text = "Scale",
         BackColor = Color.LightGray,
-        Tapped = (_, e) =>
+        WithTappedEvent = (_, e) =>
         {
-            _editManager.EditMode = EditMode.Scale;
-            return true;
+            _editingWidget!.EditMode = EditMode.Scale;
+            e.Handled = true;
         }
     };
 
@@ -186,10 +181,10 @@ public class EditingSample : IMapControlSample
         VerticalAlignment = VerticalAlignment.Absolute,
         Text = "Rotate",
         BackColor = Color.LightGray,
-        Tapped = (_, e) =>
+        WithTappedEvent = (_, e) =>
         {
-            _editManager.EditMode = EditMode.Rotate;
-            return true;
+            _editingWidget!.EditMode = EditMode.Rotate;
+            e.Handled = true;
         }
     };
 
@@ -203,10 +198,10 @@ public class EditingSample : IMapControlSample
         VerticalAlignment = VerticalAlignment.Absolute,
         Text = "Modify",
         BackColor = Color.LightGray,
-        Tapped = (_, e) =>
+        WithTappedEvent = (_, e) =>
         {
-            _editManager.EditMode = EditMode.Modify;
-            return true;
+            _editingWidget!.EditMode = EditMode.Modify;
+            e.Handled = true;
         }
     };
 
@@ -220,14 +215,14 @@ public class EditingSample : IMapControlSample
         VerticalAlignment = VerticalAlignment.Absolute,
         Text = "Add Polygon",
         BackColor = Color.LightGray,
-        Tapped = (_, e) =>
+        WithTappedEvent = (_, e) =>
         {
             var features = _targetLayer?.GetFeatures().Copy() ?? [];
             foreach (var feature in features)
                 feature.Modified();
-            _tempFeatures = new List<IFeature>(features);
-            _editManager.EditMode = EditMode.AddPolygon;
-            return true;
+            _tempFeatures = features.ToArray();
+            _editingWidget!.EditMode = EditMode.AddPolygon;
+            e.Handled = true;
         }
     };
 
@@ -241,14 +236,14 @@ public class EditingSample : IMapControlSample
         VerticalAlignment = VerticalAlignment.Absolute,
         Text = "Add Line",
         BackColor = Color.LightGray,
-        Tapped = (_, e) =>
+        WithTappedEvent = (_, e) =>
         {
             var features = _targetLayer?.GetFeatures().Copy() ?? [];
             foreach (var feature in features)
                 feature.Modified();
-            _tempFeatures = new List<IFeature>(features);
-            _editManager.EditMode = EditMode.AddLine;
-            return true;
+            _tempFeatures = features.ToArray();
+            _editingWidget!.EditMode = EditMode.AddLine;
+            e.Handled = true;
         }
     };
 
@@ -262,14 +257,14 @@ public class EditingSample : IMapControlSample
         VerticalAlignment = VerticalAlignment.Absolute,
         Text = "Add Point",
         BackColor = Color.LightGray,
-        Tapped = (_, e) =>
+        WithTappedEvent = (_, e) =>
         {
             var features = _targetLayer?.GetFeatures().Copy() ?? [];
             foreach (var feature in features)
                 feature.Modified();
-            _tempFeatures = new List<IFeature>(features);
-            _editManager.EditMode = EditMode.AddPoint;
-            return true;
+            _tempFeatures = features.ToArray();
+            _editingWidget!.EditMode = EditMode.AddPoint;
+            e.Handled = true;
         }
     };
 
@@ -292,21 +287,21 @@ public class EditingSample : IMapControlSample
         VerticalAlignment = VerticalAlignment.Absolute,
         Text = "Cancel",
         BackColor = Color.LightGray,
-        Tapped = (_, e) =>
+        WithTappedEvent = (_, e) =>
         {
             if (_targetLayer != null && _tempFeatures != null)
             {
                 _targetLayer.Clear();
                 _targetLayer.AddRange(_tempFeatures.Copy());
                 _targetLayer.DataHasChanged();
-                _mapControl?.RefreshGraphics();
+                e.Map.RefreshGraphics();
             }
 
-            _editManager.Layer?.Clear();
-            _mapControl?.RefreshGraphics();
-            _editManager.EditMode = EditMode.None;
+            _editingWidget!.Layer?.Clear();
+            e.Map.RefreshGraphics();
+            _editingWidget.EditMode = EditMode.None;
             _tempFeatures = null;
-            return true;
+            e.Handled = true;
         }
     };
 
@@ -320,20 +315,20 @@ public class EditingSample : IMapControlSample
         VerticalAlignment = VerticalAlignment.Absolute,
         Text = "Load",
         BackColor = Color.LightGray,
-        Tapped = (_, e) =>
+        WithTappedEvent = (_, e) =>
         {
             var features = _targetLayer?.GetFeatures().Copy() ?? [];
 
             foreach (var feature in features)
                 feature.Modified();
 
-            _tempFeatures = new List<IFeature>(features);
+            _tempFeatures = features.ToArray();
 
-            _editManager.Layer?.AddRange(features);
+            _editingWidget!.Layer?.AddRange(features);
             _targetLayer?.Clear();
 
-            _mapControl?.RefreshGraphics();
-            return true;
+            e.Map.RefreshGraphics();
+            e.Handled = true;
         }
     };
 
@@ -347,13 +342,13 @@ public class EditingSample : IMapControlSample
         VerticalAlignment = VerticalAlignment.Absolute,
         Text = "Save",
         BackColor = Color.LightGray,
-        Tapped = (_, e) =>
+        WithTappedEvent = (_, e) =>
         {
-            _targetLayer?.AddRange(_editManager.Layer?.GetFeatures().Copy() ?? []);
-            _editManager.Layer?.Clear();
+            _targetLayer?.AddRange(_editingWidget!.Layer?.GetFeatures().Copy() ?? []);
+            _editingWidget!.Layer?.Clear();
 
-            _mapControl?.RefreshGraphics();
-            return true;
+            e.Map.RefreshGraphics();
+            e.Handled = true;
         }
     };
 
@@ -367,10 +362,10 @@ public class EditingSample : IMapControlSample
         VerticalAlignment = VerticalAlignment.Absolute,
         Text = "Layer 3",
         BackColor = Color.LightGray,
-        Tapped = (_, e) =>
+        WithTappedEvent = (_, e) =>
         {
             _targetLayer = map.Layers.FirstOrDefault(f => f.Name == "Layer 3") as WritableLayer;
-            return true;
+            e.Handled = true;
         }
     };
 
@@ -384,10 +379,10 @@ public class EditingSample : IMapControlSample
         VerticalAlignment = VerticalAlignment.Absolute,
         Text = "Layer 2",
         BackColor = Color.LightGray,
-        Tapped = (_, e) =>
+        WithTappedEvent = (_, e) =>
         {
             _targetLayer = map.Layers.FirstOrDefault(f => f.Name == "Layer 2") as WritableLayer;
-            return true;
+            e.Handled = true;
         }
     };
 
@@ -401,14 +396,14 @@ public class EditingSample : IMapControlSample
         VerticalAlignment = VerticalAlignment.Absolute,
         Text = "Layer 1",
         BackColor = Color.LightGray,
-        Tapped = (_, e) =>
+        WithTappedEvent = (_, e) =>
         {
             _targetLayer = map.Layers.FirstOrDefault(f => f.Name == "Layer 1") as WritableLayer;
-            return true;
+            e.Handled = true;
         }
     };
 
-    public static Map CreateMap()
+    public static Map CreateMap(EditMode editMode)
     {
         var map = new Map();
 
@@ -418,6 +413,8 @@ public class EditingSample : IMapControlSample
         map.Layers.Add(CreatePolygonLayer());
         var editLayer = CreateEditLayer();
         map.Layers.Add(editLayer);
+        InitEditMode(editMode, map);
+        map.Navigator.ZoomToBox(GetGrownExtent(editLayer));
 
         return map;
     }
@@ -426,7 +423,6 @@ public class EditingSample : IMapControlSample
     {
         Name = "EditLayer",
         Style = CreateEditLayerStyle(),
-        IsMapInfoLayer = true
     };
 
     // The edit layer has two styles. That is why it needs to use a StyleCollection.
@@ -444,7 +440,12 @@ public class EditingSample : IMapControlSample
         }
     };
 
-    private static SymbolStyle CreateStyleToShowTheVertices() => new() { SymbolScale = 0.5 };
+    private static SymbolStyle CreateStyleToShowTheVertices() => new()
+    {
+        Outline = new Pen(Color.Gray, 1f),
+        Fill = new Brush(Color.White),
+        SymbolScale = 0.5
+    };
 
     private static VectorStyle CreateEditLayerBasicStyle() => new()
     {
@@ -526,6 +527,7 @@ public class EditingSample : IMapControlSample
             Outline = new Pen(_lineLayerColor, 3)
         };
     }
+
     private static VectorStyle CreatePolygonStyle()
     {
         return new VectorStyle
@@ -535,4 +537,6 @@ public class EditingSample : IMapControlSample
             Outline = new Pen(_polygonLayerColor, 3)
         };
     }
+
+    private static MRect? GetGrownExtent(ILayer? layer) => layer?.Extent?.Grow(layer.Extent.Width * 0.2) ?? null;
 }

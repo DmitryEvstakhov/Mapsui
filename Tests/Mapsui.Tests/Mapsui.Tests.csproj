@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-    <TargetFrameworks>net8.0</TargetFrameworks>
+    <TargetFrameworks>net9.0</TargetFrameworks>
 		<OutputType>Library</OutputType>
 		<RestorePackages>true</RestorePackages>
 		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
@@ -12,6 +12,7 @@
 		<None Remove="Resources\capabilities_1_3_0.xml" />
 		<None Remove="Resources\example.tfw" />
 		<None Remove="Resources\example.tif" />
+		<None Remove="Resources\Images\image.png" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -21,11 +22,11 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\..\Mapsui.ArcGIS\Mapsui.ArcGIS.csproj" />
 		<ProjectReference Include="..\..\Mapsui.Extensions\Mapsui.Extensions.csproj" />
 		<ProjectReference Include="..\..\Mapsui.Tiling\Mapsui.Tiling.csproj" />
 		<ProjectReference Include="..\..\Mapsui.Rendering.Skia\Mapsui.Rendering.Skia.csproj" />
 		<ProjectReference Include="..\..\Mapsui\Mapsui.csproj" />
-		<ProjectReference Include="..\Mapsui.Tests.Common\Mapsui.Tests.Common.csproj" />
   </ItemGroup>
 
 	<ItemGroup>
@@ -58,6 +59,9 @@
 		</Content>
 		<Content Include="Resources\example.tif">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</Content>
+		<Content Include="Resources\Images\image.png">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</Content>
 		<Content Include="Resources\Images\Pin.svg">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>

@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
     <Authors>Mapsui Contributers</Authors>
 		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <!--For Debugging Source Generated Files uncomment the line below-->
@@ -11,12 +11,14 @@
 
   <ItemGroup>
     <None Remove="GeoData\GeoJson\countries.geojson" />
+    <None Remove="GeoData\MbTiles\zurich.mbtiles" />
     <None Remove="GeoData\TrueMarble\0\0\0.png" />
     <None Remove="GeoData\TrueMarble\1\0\0.png" />
     <None Remove="GeoData\TrueMarble\1\0\1.png" />
     <None Remove="GeoData\TrueMarble\1\1\0.png" />
     <None Remove="GeoData\TrueMarble\1\1\1.png" />
-    <None Remove="GeoData\World\cities.dbf" />
+    <None Remove="GeoData\World\
+                  .dbf" />
     <None Remove="GeoData\World\cities.prj" />
     <None Remove="GeoData\World\cities.shp" />
     <None Remove="GeoData\World\cities.shp.sidx" />
@@ -26,6 +28,18 @@
     <None Remove="GeoData\World\countries.shp" />
     <None Remove="GeoData\World\countries.shp.sidx" />
     <None Remove="GeoData\World\countries.shx" />
+    <None Remove="GeoData\World\EZG_KB_LM.dbf" />
+    <None Remove="GeoData\World\EZG_KB_LM.prj" />
+    <None Remove="GeoData\World\EZG_KB_LM.shp" />
+    <None Remove="GeoData\World\EZG_KB_LM.shp.sidx" />
+    <None Remove="GeoData\World\EZG_KB_LM.shp.sqlite" />
+    <None Remove="GeoData\World\EZG_KB_LM.shx" />
+    <None Remove="GeoData\World\modell_ezgs_v02_ohneTalsperren_EPSG3857.dbf" />
+    <None Remove="GeoData\World\modell_ezgs_v02_ohneTalsperren_EPSG3857.prj" />
+    <None Remove="GeoData\World\modell_ezgs_v02_ohneTalsperren_EPSG3857.shp" />
+    <None Remove="GeoData\World\modell_ezgs_v02_ohneTalsperren_EPSG3857.shp.sidx" />
+    <None Remove="GeoData\World\modell_ezgs_v02_ohneTalsperren_EPSG3857.shp.sqlite" />
+    <None Remove="GeoData\World\modell_ezgs_v02_ohneTalsperren_EPSG3857.shx" />
     <None Remove="GeoData\World\rivers.dbf" />
     <None Remove="GeoData\World\rivers.prj" />
     <None Remove="GeoData\World\rivers.shp" />
@@ -50,14 +64,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="GeoData\GeoJson\cities.geojson" />
     <EmbeddedResource Include="GeoData\GeoJson\countries.geojson" />
+    <EmbeddedResource Include="GeoData\GeoTiff\example.tfw">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="GeoData\GeoTiff\example.tif">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </EmbeddedResource>
     <EmbeddedResource Include="GeoData\Images\a123330.jpeg">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </EmbeddedResource>
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="GeoData\GeoJson\cities.geojson" />
     <EmbeddedResource Include="GeoData\Json\cities.json" />
     <EmbeddedResource Include="GeoData\Json\congo.json" />
     <EmbeddedResource Include="GeoData\Json\countries-hires.json" />
@@ -68,6 +85,7 @@
     <EmbeddedResource Include="GeoData\MbTiles\world.mbtiles">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </EmbeddedResource>
+    <EmbeddedResource Include="GeoData\MbTiles\zurich.mbtiles" />
     <EmbeddedResource Include="GeoData\TrueMarble\0\0\0.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </EmbeddedResource>
@@ -113,6 +131,42 @@
     <EmbeddedResource Include="GeoData\World\countries.shx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </EmbeddedResource>
+    <EmbeddedResource Include="GeoData\World\EZG_KB_LM.dbf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="GeoData\World\EZG_KB_LM.prj">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="GeoData\World\EZG_KB_LM.shp">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="GeoData\World\EZG_KB_LM.shp.sidx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="GeoData\World\EZG_KB_LM.shp.sqlite">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="GeoData\World\EZG_KB_LM.shx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="GeoData\World\modell_ezgs_v02_ohneTalsperren_EPSG3857.dbf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="GeoData\World\modell_ezgs_v02_ohneTalsperren_EPSG3857.prj">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="GeoData\World\modell_ezgs_v02_ohneTalsperren_EPSG3857.shp">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="GeoData\World\modell_ezgs_v02_ohneTalsperren_EPSG3857.shp.sidx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="GeoData\World\modell_ezgs_v02_ohneTalsperren_EPSG3857.shp.sqlite">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="GeoData\World\modell_ezgs_v02_ohneTalsperren_EPSG3857.shx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </EmbeddedResource>
     <EmbeddedResource Include="GeoData\World\rivers.dbf">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </EmbeddedResource>
@@ -128,18 +182,7 @@
     <EmbeddedResource Include="GeoData\World\rivers.shx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </EmbeddedResource>
-    <EmbeddedResource Include="Images\arrow.png" />
     <EmbeddedResource Include="Images\arrow.svg" />
-    <EmbeddedResource Include="GeoData\GeoTiff\example.tfw">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </EmbeddedResource>
-    <EmbeddedResource Include="GeoData\GeoTiff\example.tif">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Images\checkered.png" />
-    <EmbeddedResource Include="Images\circle.png" />
-    <EmbeddedResource Include="Images\Ghostscript_Tiger.png" />
-    <EmbeddedResource Include="Images\Ghostscript_Tiger.svg" />
     <EmbeddedResource Include="Images\home.png" />
     <EmbeddedResource Include="Images\icon.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -148,18 +191,37 @@
     <EmbeddedResource Include="Images\loc.png" />
     <EmbeddedResource Include="Images\location.png" />
     <EmbeddedResource Include="Images\netherlands.jpg" />
+    <EmbeddedResource Include="Images\avion_silhouette.png" />
+    <EmbeddedResource Include="Images\checkered.png" />
+    <EmbeddedResource Include="Images\circle.png" />
+    <EmbeddedResource Include="Images\Ghostscript_Tiger.svg" />
+    <EmbeddedResource Include="Images\iconthatneedsoffset.png" />
     <EmbeddedResource Include="Images\osm-liberty.png" />
     <EmbeddedResource Include="Images\Pin.svg" />
+    <EmbeddedResource Include="GeoData\TilesAsEmbeddedResource\0_0_0.png" />
+    <EmbeddedResource Include="GeoData\TilesAsEmbeddedResource\1_0_0.png" />
+    <EmbeddedResource Include="GeoData\TilesAsEmbeddedResource\1_0_1.png" />
+    <EmbeddedResource Include="GeoData\TilesAsEmbeddedResource\1_1_0.png" />
+    <EmbeddedResource Include="GeoData\TilesAsEmbeddedResource\1_1_1.png" />
+    <EmbeddedResource Include="GeoData\Shapefiles\test_file.dbf" />
+    <EmbeddedResource Include="GeoData\Shapefiles\test_file.prj" />
+    <EmbeddedResource Include="GeoData\Shapefiles\test_file.qmd" />
+    <EmbeddedResource Include="GeoData\Shapefiles\test_file.shp" />
+    <EmbeddedResource Include="GeoData\Shapefiles\test_file.shp.sidx" />
+    <EmbeddedResource Include="GeoData\Shapefiles\test_file.shx" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="BruTile" />
     <PackageReference Include="System.Text.Json" />
     <PackageReference Include="BruTile.MbTiles" />
+    <PackageReference Include="VexTile.TileSource.Mvt" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\Mapsui.ArcGIS\Mapsui.ArcGIS.csproj" />
+    <ProjectReference Include="..\..\Mapsui.Experimental.VectorTiles\Mapsui.Experimental.VectorTiles.csproj" />
+    <ProjectReference Include="..\..\Mapsui.Experimental\Mapsui.Experimental.csproj" />
     <ProjectReference Include="..\..\Mapsui.Extensions\Mapsui.Extensions.csproj" />
     <ProjectReference Include="..\..\Mapsui.Rendering.Skia\Mapsui.Rendering.Skia.csproj" />
     <ProjectReference Include="..\..\Mapsui.Tiling\Mapsui.Tiling.csproj" />

@@ -5,13 +5,13 @@
 using System;
 using System.Threading.Tasks;
 using Mapsui.Extensions;
-using Mapsui.Layers;
 using Mapsui.Logging;
 using Mapsui.Samples.Common;
 using Mapsui.Samples.Common.Extensions;
 using Mapsui.UI;
 
 namespace Mapsui.Rendering.Skia.Tests.Helpers;
+
 internal static class SampleHelper
 {
     public static async Task<RegressionMapControl> InitMapAsync(ISampleBase sample)
@@ -34,8 +34,6 @@ internal static class SampleHelper
         }
 
         await mapControl.WaitForLoadingAsync();
-        var fetchInfo = new FetchInfo(mapControl.Map.Navigator.Viewport.ToSection(), mapControl.Map.CRS);
-        mapControl.Map.RefreshData(fetchInfo);
 
         return mapControl;
     }

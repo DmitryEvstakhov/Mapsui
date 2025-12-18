@@ -4,7 +4,6 @@
 
 using System;
 
-// ReSharper disable All - This is a workaround for a limitation of the nuget package
 namespace ConcurrentCollections;
 
 internal static class PlatformHelper
@@ -12,13 +11,13 @@ internal static class PlatformHelper
     private const int ProcessorCountRefreshIntervalMs = 30000;
 
     private static volatile int _processorCount;
-    private static volatile int _lastProcessorCountRefreshTicks;
+    private static long _lastProcessorCountRefreshTicks;
 
     internal static int ProcessorCount
     {
         get
         {
-            var now = Environment.TickCount;
+            var now = Environment.TickCount64;
             if (_processorCount == 0 || now - _lastProcessorCountRefreshTicks >= ProcessorCountRefreshIntervalMs)
             {
                 _processorCount = Environment.ProcessorCount;

@@ -1,7 +1,6 @@
 using Mapsui.Layers;
 using Mapsui.Logging;
 using Mapsui.Nts;
-using Mapsui.Rendering.Skia.Cache;
 using Mapsui.Rendering.Skia.SkiaStyles;
 using Mapsui.Styles;
 using NetTopologySuite.Geometries;
@@ -31,7 +30,7 @@ public class VectorStyleRenderer : ISkiaStyleRenderer, IFeatureSize
                     }
                     break;
                 case Point point:
-                    SymbolStyleRenderer.DrawXY(canvas, viewport, layer, point.X, point.Y, CreateSymbolStyle(vectorStyle), renderService);
+                    SymbolStyleRenderer.DrawStatic(canvas, viewport, layer, point.X, point.Y, CreateSymbolStyle(vectorStyle), renderService);
                     break;
                 case Polygon polygon:
                     PolygonRenderer.Draw(canvas, viewport, vectorStyle, feature, polygon, opacity, renderService.VectorCache, position);
@@ -39,8 +38,8 @@ public class VectorStyleRenderer : ISkiaStyleRenderer, IFeatureSize
                 case LineString lineString:
                     LineStringRenderer.Draw(canvas, viewport, vectorStyle, feature, lineString, opacity, renderService, position);
                     break;
-                case null:
-                    throw new ArgumentException($"Geometry is null, Layer: {layer.Name}");
+                case null: // A geometry may be null. It might be a mistake but logging in the renderer would flood the log.
+                    break;
                 default:
                     throw new ArgumentException($"Unknown geometry type: {geometry?.GetType()}, Layer: {layer.Name}");
             }
@@ -51,7 +50,7 @@ public class VectorStyleRenderer : ISkiaStyleRenderer, IFeatureSize
             switch (feature)
             {
                 case PointFeature pointFeature:
-                    SymbolStyleRenderer.DrawXY(canvas, viewport, layer, pointFeature.Point.X, pointFeature.Point.Y, CreateSymbolStyle(vectorStyle), renderService);
+                    SymbolStyleRenderer.DrawStatic(canvas, viewport, layer, pointFeature.Point.X, pointFeature.Point.Y, CreateSymbolStyle(vectorStyle), renderService);
                     break;
                 case GeometryFeature geometryFeature:
                     DrawGeometry(geometryFeature?.Geometry);
@@ -76,7 +75,7 @@ public class VectorStyleRenderer : ISkiaStyleRenderer, IFeatureSize
 
     bool IFeatureSize.NeedsFeature => false;
 
-    double IFeatureSize.FeatureSize(IStyle style, IRenderService renderService, IFeature? feature)
+    double IFeatureSize.FeatureSize(IStyle style, RenderService renderService, IFeature? feature)
     {
         if (style is VectorStyle vectorStyle)
         {

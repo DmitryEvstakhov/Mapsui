@@ -1,9 +1,6 @@
-﻿using System;
-using System.IO;
-using Mapsui.Samples.Common.Maps.Demo;
+﻿using Mapsui.Samples.Common.Maps.Basic;
 using Mapsui.UI;
 using Mapsui.UI.Maui;
-using Microsoft.Maui.Controls;
 
 namespace Mapsui.Samples.Maui;
 
@@ -15,10 +12,9 @@ public class SnapshotSample : IMapViewSample
 
     public bool UpdateLocation => true;
 
-    public bool OnTap(object? sender, EventArgs args)
+    public bool OnTap(object? s, MapClickedEventArgs e)
     {
-        var mapView = sender as UI.Maui.MapView;
-        var e = args as MapClickedEventArgs;
+        var mapView = s as UI.Maui.MapView;
 
         if (mapView == null)
             return false;
@@ -31,6 +27,6 @@ public class SnapshotSample : IMapViewSample
 
     public void Setup(IMapControl mapControl)
     {
-        mapControl.Map = OsmSample.CreateMap();
+        mapControl.Map = OpenStreetMapSample.CreateMap();
     }
 }

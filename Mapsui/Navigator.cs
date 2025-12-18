@@ -1,24 +1,28 @@
 ﻿using Mapsui.Animations;
 using Mapsui.Extensions;
+using Mapsui.Fetcher;
 using Mapsui.Limiting;
 using Mapsui.Logging;
 using Mapsui.Manipulations;
 using Mapsui.Utilities;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 
 namespace Mapsui;
 
 public class Navigator
 {
-    private Viewport _viewport = new(0, 0, 1, 0, 0, 0);
+    private Viewport _viewport = new();
     private IEnumerable<AnimationEntry<Viewport>> _animations = [];
-    private readonly List<Action> _initialization = [];
+    private readonly List<Action> _postponedCalls;
     private MMinMax? _defaultZoomBounds;
     private MRect? _defaultPanBounds;
     private MMinMax? _overrideZoomBounds;
     private MRect? _overridePanBounds;
+    private readonly object _postponedCallsLock = new();
+    private bool _suppressNotifications = true;
 
     public delegate void ViewportChangedEventHandler(object sender, ViewportChangedEventArgs e);
 
@@ -26,7 +30,7 @@ public class Navigator
     /// Called when a data refresh is needed. This directly after a non-animated viewport change
     /// is made and after an animation has completed.
     /// </summary>
-    public event EventHandler? RefreshDataRequest;
+    public event EventHandler<FetchRequestedEventArgs>? FetchRequested;
     public event ViewportChangedEventHandler? ViewportChanged;
 
     /// <summary>
@@ -109,30 +113,51 @@ public class Navigator
             if (_viewport == value) return;
             var oldViewport = _viewport;
             _viewport = value;
-            OnViewportChanged(oldViewport);
+            OnViewportChanged(oldViewport, _viewport);
         }
     }
 
-    public bool IsInitialized { get; private set; } = false;
+    public bool HasExecutedPostponedCalls { get; private set; } = false;
 
-    public void Initialize()
+    public Navigator()
     {
-        if (!IsInitialized)
+        // Add a default postponed call which will be executed as soon as the size is known.
+        _postponedCalls = new List<Action> { DefaultPostponedCall };
+    }
+
+    private void DefaultPostponedCall()
+    {
+        if (PanBounds is null)
         {
-            IsInitialized = true;
+            Logger.Log(LogLevel.Information, $"Navigator: Not zooming to {nameof(PanBounds)} at startup because they are not set.");
+        }
+        else
+        {
+            Logger.Log(LogLevel.Information, $"Navigator: Zooming to {nameof(PanBounds)} at startup.");
+            ZoomToPanBounds();
+        }
+    }
 
-            if (_initialization.Count == 0)
+    private void ExecutedPostponedCalls()
+    {
+        lock (_postponedCallsLock)
+        {
+            if (!HasExecutedPostponedCalls)
             {
-                ZoomToPanBounds();
-                return;
-            }
+                HasExecutedPostponedCalls = true;
 
-            foreach (var action in _initialization)
-            {
-                action();
-            }
+                // Actions could either modify the current state (after ZoomToBox above) or override the current state.
+                foreach (var postponedCall in _postponedCalls)
+                {
+                    postponedCall();
+                }
 
-            _initialization.Clear();
+                _postponedCalls.Clear();
+
+                _suppressNotifications = false; // Multiple postponed calls will trigger only one refresh because of suppression during startup.
+                OnViewportChanged(_viewport, _viewport);
+                OnFetchRequested(ChangeType.Discrete);
+            }
         }
     }
 
@@ -148,8 +173,38 @@ public class Navigator
 
     public MouseWheelAnimation MouseWheelAnimation { get; } = new();
 
+    public void MouseWheelZoomContinuous(double scaleFactor, ScreenPosition centerOfZoom)
+    {
+        if (!Viewport.HasSize())
+            return;
+        if (ZoomLock)
+            return;
+        if (scaleFactor == 1)
+            return; // No change
+        if (scaleFactor <= Constants.Epsilon)
+        {
+            Logger.Log(LogLevel.Warning, "Navigator: MouseWheelZoomContinuous was called with a mouseWheelDelta <= 0. This is unexpected.");
+            return;
+        }
+
+        if (PanLock) // Avoid pan by zooming on center
+            centerOfZoom = Viewport.WorldToScreen(Viewport.CenterX, Viewport.CenterY);
+
+        // MouseWheelAnimation tracks the destination resolution which allows for faster zooming in if the next tick
+        // starts before the previous animation is finished. We may want something like that here as well.
+
+        var resolution = Viewport.Resolution * scaleFactor;
+        ZoomTo(resolution, centerOfZoom); // Not using animations for continuous zooming because the steps will be  small.
+    }
+
     public void MouseWheelZoom(int mouseWheelDelta, ScreenPosition centerOfZoom)
     {
+        if (ZoomLock)
+            return;
+
+        if (PanLock) // Avoid pan by zooming on center
+            centerOfZoom = Viewport.WorldToScreen(Viewport.CenterX, Viewport.CenterY);
+
         // It is unexpected that this method uses the MouseWheelAnimation.Animation and Easing. 
         // At the moment this solution allows the user to change these fields, so I don't want
         // them to become hardcoded values in the MapControl. There should be a more general
@@ -170,13 +225,18 @@ public class Navigator
     /// <param name="easing">The type of easing function used to transform from begin tot end state</param>
     public void ZoomToBox(MRect? box, MBoxFit boxFit = MBoxFit.Fit, long duration = -1, Easing? easing = default)
     {
-        if (!IsInitialized)
+        if (!HasExecutedPostponedCalls)
         {
             AddToInitialization(() => ZoomToBox(box, boxFit, duration, easing));
             return;
         }
 
-        if (box == null) return;
+        if (box == null)
+        {
+            if (Viewport.Resolution <= 0)
+                Logger.Log(LogLevel.Warning, $"Navigator: {nameof(ZoomToBox)} was called but the {nameof(box)} was null. This is unexpected.");
+            return;
+        }
         if (box.Width <= 0 || box.Height <= 0) return;
 
         var resolution = ZoomHelper.CalculateResolutionForWorldSize(
@@ -193,7 +253,7 @@ public class Navigator
     /// <param name="easing">The type of easing function used to transform from begin tot end state</param>
     public void ZoomToPanBounds(MBoxFit boxFit = MBoxFit.Fill, long duration = -1, Easing? easing = default)
     {
-        if (!IsInitialized)
+        if (!HasExecutedPostponedCalls)
         {
             AddToInitialization(() => ZoomToPanBounds(boxFit, duration, easing));
             return;
@@ -211,14 +271,11 @@ public class Navigator
     /// <param name="easing">The type of easing function used to transform from begin tot end state</param>
     public void CenterOnAndZoomTo(MPoint center, double resolution, long duration = -1, Easing? easing = default)
     {
-        if (!IsInitialized)
+        if (!HasExecutedPostponedCalls)
         {
             AddToInitialization(() => CenterOnAndZoomTo(center, resolution, duration, easing));
             return;
         }
-
-        if (PanLock) return;
-        if (ZoomLock) return;
 
         var newViewport = Viewport with { CenterX = center.X, CenterY = center.Y, Resolution = resolution };
         SetViewport(newViewport, duration, easing);
@@ -232,13 +289,11 @@ public class Navigator
     /// <param name="easing">The type of easing function used to transform from begin tot end state</param>
     public void ZoomTo(double resolution, long duration = -1, Easing? easing = default)
     {
-        if (!IsInitialized)
+        if (!HasExecutedPostponedCalls)
         {
             AddToInitialization(() => ZoomTo(resolution, duration, easing));
             return;
         }
-
-        if (ZoomLock) return;
 
         var newViewport = Viewport with { Resolution = resolution };
         SetViewport(newViewport, duration, easing);
@@ -258,23 +313,14 @@ public class Navigator
     /// <param name="easing">The easing of the animation when duration is > 0</param>
     public void ZoomTo(double resolution, ScreenPosition centerOfZoomScreen, long duration = -1, Easing? easing = default)
     {
-        if (!IsInitialized)
+        if (!HasExecutedPostponedCalls)
         {
             AddToInitialization(() => ZoomTo(resolution, centerOfZoomScreen, duration, easing));
             return;
         }
 
-        if (ZoomLock) return;
-
         var (centerOfZoomX, centerOfZoomY) = Viewport.ScreenToWorldXY(
             centerOfZoomScreen.X, centerOfZoomScreen.Y);
-
-        if (PanLock)
-        {
-            // Avoid pan by zooming on center
-            centerOfZoomX = Viewport.CenterX;
-            centerOfZoomY = Viewport.CenterY;
-        }
 
         var (x, y) = TransformationAlgorithms.CalculateCenterOfMap(
             centerOfZoomX, centerOfZoomY, resolution, Viewport.CenterX, Viewport.CenterY, Viewport.Resolution);
@@ -284,23 +330,29 @@ public class Navigator
     }
 
     /// <summary>
-    /// Zoom in to the next resolution in the Navigator.Resolutions list.
+    /// Zoom in to the next resolution in the Navigator.Resolutions list. Respects ZoomLock.
     /// </summary>
     /// <param name="duration">Duration for animation in milliseconds.</param>
     /// <param name="easing">The type of easing function used to transform from begin tot end state</param>
     public void ZoomIn(long duration = -1, Easing? easing = default)
     {
+        if (ZoomLock)
+            return;
+
         var resolution = ZoomHelper.GetResolutionToZoomIn(Resolutions, Viewport.Resolution);
         ZoomTo(resolution, duration, easing);
     }
 
     /// <summary>
-    /// Zoom out to the next resolution in the Navigator.Resolutions list.
+    /// Zoom out to the next resolution in the Navigator.Resolutions list. Respects ZoomLock.
     /// </summary>
     /// <param name="duration">Duration for animation in milliseconds.</param>
     /// <param name="easing">The type of easing function used to transform from begin tot end state</param>
     public void ZoomOut(long duration = -1, Easing? easing = default)
     {
+        if (ZoomLock)
+            return;
+
         var resolution = ZoomHelper.GetResolutionToZoomOut(Resolutions, Viewport.Resolution);
         ZoomTo(resolution, duration, easing);
     }
@@ -341,7 +393,7 @@ public class Navigator
     {
         if (level < 0 || level >= Resolutions.Count)
         {
-            Logger.Log(LogLevel.Warning, $"Zoom level '{level}' is not an index in the range of the resolutions list. " +
+            Logger.Log(LogLevel.Warning, $"Navigator: Zoom level '{level}' is not an index in the range of the resolutions list. " +
                 $"The resolutions list is length `{Resolutions.Count}`");
             return;
         }
@@ -368,13 +420,11 @@ public class Navigator
     /// <param name="easing">Function for easing</param>
     public void CenterOn(MPoint center, long duration = -1, Easing? easing = default)
     {
-        if (!IsInitialized)
+        if (!HasExecutedPostponedCalls)
         {
             AddToInitialization(() => CenterOn(center, duration, easing));
             return;
         }
-
-        if (PanLock) return;
 
         var newViewport = Viewport with { CenterX = center.X, CenterY = center.Y };
         SetViewport(newViewport, duration, easing);
@@ -388,7 +438,7 @@ public class Navigator
     /// <param name="duration">Duration for animation in milliseconds.</param>
     public void FlyTo(MPoint center, double maxResolution, long duration = 500)
     {
-        _animations = FlyToAnimation.Create(Viewport, center, maxResolution, duration);
+        SetViewportAnimations(FlyToAnimation.Create(Viewport, center, maxResolution, duration));
     }
 
     /// <summary>
@@ -399,13 +449,11 @@ public class Navigator
     /// <param name="easing">The type of easing function used to transform from begin tot end state</param>
     public void RotateTo(double rotation, long duration = -1, Easing? easing = default)
     {
-        if (!IsInitialized)
+        if (!HasExecutedPostponedCalls)
         {
             AddToInitialization(() => RotateTo(rotation, duration, easing));
             return;
         }
-
-        if (RotationLock) return;
 
         var newViewport = Viewport with { Rotation = rotation };
         SetViewport(newViewport, duration, easing);
@@ -424,7 +472,7 @@ public class Navigator
         if (PanLock)
             return;
 
-        _animations = FlingAnimation.Create(velocityX, velocityY, maxDuration);
+        SetViewportAnimations(FlingAnimation.Create(velocityX, velocityY, maxDuration, () => OnFetchRequested(ChangeType.Discrete)));
     }
 
     public void Manipulate(Manipulation? manipulation)
@@ -504,21 +552,32 @@ public class Navigator
 
     public void SetSize(double width, double height)
     {
+        if (Viewport.Width == width && Viewport.Height == height)
+            return; // No change in size, no need to update.
+
+        Logger.Log(LogLevel.Information, $"Navigator: SetSize {width} x {height}");
         ClearAnimations();
         SetViewportWithLimit(Viewport with { Width = width, Height = height });
+        var wasInitialized = HasExecutedPostponedCalls;
         InitializeIfNeeded();
-        OnRefreshDataRequest();
+        if (wasInitialized) // Workaround to prevent double data refresh: Only call when it was already initialized because if it is not then it will be called in Initialize().
+            OnFetchRequested(ChangeType.Discrete);
     }
 
     private void InitializeIfNeeded()
     {
-        if (ShouldInitialize())
-            Initialize();
+        if (!HasExecutedPostponedCalls && Viewport.HasSize())
+            ExecutedPostponedCalls();
     }
 
-    private void OnRefreshDataRequest()
+    private void OnFetchRequested(ChangeType changeType)
     {
-        RefreshDataRequest?.Invoke(this, EventArgs.Empty);
+        if (_suppressNotifications)
+            return;
+
+        // At the moment we refresh the data on each FetchRequested. Instead we should  always
+        // refresh on ChangeType.Discrete, and do throttled requests on ChangeType.Continuous.
+        FetchRequested?.Invoke(this, new FetchRequestedEventArgs(changeType));
     }
 
     private void ClearAnimations()
@@ -533,9 +592,12 @@ public class Navigator
     /// Property change event
     /// </summary>
     /// <param name="oldViewport">Name of property that changed</param>
-    private void OnViewportChanged(Viewport oldViewport)
+    private void OnViewportChanged(Viewport oldViewport, Viewport viewport)
     {
-        ViewportChanged?.Invoke(this, new ViewportChangedEventArgs(oldViewport));
+        if (_suppressNotifications)
+            return;
+
+        ViewportChanged?.Invoke(this, new ViewportChangedEventArgs(oldViewport, viewport));
     }
 
     public bool UpdateAnimations()
@@ -544,7 +606,7 @@ public class Navigator
         if (_animations.All(a => a.Done))
         {
             ClearAnimations();
-            OnRefreshDataRequest();
+            OnFetchRequested(ChangeType.Discrete);
         }
         var animationResult = Animation.UpdateAnimations(Viewport, _animations);
 
@@ -553,7 +615,7 @@ public class Navigator
         if (ShouldAnimationsBeHaltedBecauseOfLimiting(animationResult.State, Viewport))
         {
             ClearAnimations();
-            OnRefreshDataRequest();
+            OnFetchRequested(ChangeType.Discrete);
             return false; // Not running
         }
 
@@ -563,6 +625,7 @@ public class Navigator
     public void SetViewportAnimations(List<AnimationEntry<Viewport>> animations)
     {
         _animations = animations;
+        OnViewportChanged(Viewport, Viewport); // Call OnViewportChanged with current Viewport to trigger the invalidate loop so animations will be updated.
     }
 
     private void SetViewportWithLimit(Viewport viewport)
@@ -605,6 +668,9 @@ public class Navigator
         // as the resolution. This is to prevent the situation where you zoom out while hitting the zoom bounds
         // and you see no change in resolution, but you will see a change in pan.
 
+        if (originalViewport.Resolution <= 0)
+            return goalViewport;
+
         var resolutionLimiting = CalculateResolutionLimiting(
             originalViewport.Resolution, goalViewport.Resolution, limitedViewport.Resolution);
 
@@ -644,17 +710,23 @@ public class Navigator
 
     public void SetViewport(Viewport viewport, long duration = -1, Easing? easing = default)
     {
+        if (viewport.Resolution <= 0)
+            Logger.Log(LogLevel.Warning, $"Navigator: The Viewport was set but Resolution is {viewport.Resolution}. This is unexpected.");
+
         if (duration <= 0)
         {
             ClearAnimations();
             SetViewportWithLimit(viewport);
-            OnRefreshDataRequest();
+            OnFetchRequested(ChangeType.Discrete);
         }
         else
         {
+            // If an animation was already started we do a data refresh for the viewport 
+            // at this point. Not entirely sure if there could be too many consecutive animations
+            // started to overload to the data refresh.
             if (_animations.Any())
-                OnRefreshDataRequest();
-            _animations = ViewportAnimation.Create(Viewport, viewport, duration, easing);
+                OnFetchRequested(ChangeType.Continuous);
+            SetViewportAnimations(ViewportAnimation.Create(Viewport, viewport, duration, easing));
         }
     }
 
@@ -662,34 +734,18 @@ public class Navigator
     /// Add a call to a function called before initialization of Viewport to a list
     /// </summary>
     /// <param name="action">Function called before initialization</param>
+    [UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code", Justification = "<Pending>")]
     private void AddToInitialization(Action action)
     {
         // Save state when this function is originally called
-        var panLock = PanLock;
-        var zoomLock = ZoomLock;
-        var rotationLock = RotationLock;
         // Add action to initialization list
-        _initialization.Add(() =>
+        _postponedCalls.Add(() =>
         {
-            // Save current state of locks
-            var savePanLock = PanLock;
-            var saveZoomLock = ZoomLock;
-            var saveRotationLock = RotationLock;
-            // Set locks like they were at the time the action was called
-            PanLock = panLock;
-            ZoomLock = zoomLock;
-            RotationLock = rotationLock;
+            Logger.Log(LogLevel.Information, $"Navigator: Executing postponed call '{MetaDataHelper.GetReadableActionName(action)}'");
             action();
             //Restore old settings of locks
-            PanLock = savePanLock;
-            ZoomLock = saveZoomLock;
-            RotationLock = saveRotationLock;
         });
     }
-
-    private bool ShouldInitialize() => !IsInitialized && CanInitialize();
-
-    private bool CanInitialize() => Viewport.HasSize() && PanBounds is not null; // Should we check on ZoomBounds too?
 
     internal int GetAnimationsCount => _animations.Count();
 

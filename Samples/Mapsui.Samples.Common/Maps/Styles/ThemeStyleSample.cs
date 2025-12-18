@@ -21,7 +21,7 @@ public class ThemeStyleSample : ISample
         ShapeFilesDeployer.CopyEmbeddedResourceToFile("countries.shp");
     }
 
-    public string Name => "ThemeStyle on shapefile";
+    public string Name => "ThemeStyleOnShapefile";
     public string Category => "Styles";
 
     public Task<Map> CreateMapAsync() => Task.FromResult(CreateMap());
@@ -36,7 +36,7 @@ public class ThemeStyleSample : ISample
         map.Layers.Add(CreateCountryLayer(countrySource));
         map.Layers.Add(CreateCityHoverPoints());
 
-        map.Widgets.Add(new MapInfoWidget(map));
+        map.Widgets.Add(new MapInfoWidget(map, l => l.Name == "Countries" || l.Name == "Points"));
 
         return map;
     }
@@ -48,7 +48,6 @@ public class ThemeStyleSample : ISample
             Name = "Countries",
             DataSource = countrySource,
             Style = CreateThemeStyle(),
-            IsMapInfoLayer = true
         };
     }
 
@@ -98,14 +97,13 @@ public class ThemeStyleSample : ISample
             Features = features,
             Style = CreateCityStyle(),
             Name = "Points",
-            IsMapInfoLayer = true
         };
     }
 
-    private static SymbolStyle CreateCityStyle() => new()
+    private static ImageStyle CreateCityStyle() => new()
     {
-        ImageSource = "embedded://Mapsui.Samples.Common.Images.location.png",
-        SymbolOffset = new Offset { Y = 64 },
+        Image = "embedded://Mapsui.Samples.Common.Images.location.png",
+        Offset = new Offset { Y = 64 },
         SymbolScale = 0.25
     };
 }

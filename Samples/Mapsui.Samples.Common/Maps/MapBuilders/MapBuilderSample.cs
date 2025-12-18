@@ -20,7 +20,7 @@ public class MapBuilderSample : ISample
     public Task<Map> CreateMapAsync()
         => Task.FromResult(new MapBuilder()
             .WithOpenStreetMapLayer((l, m) => l.Name = "OpenStreetMap")
-            .WithLayer((map) => new MemoryLayer("Pin Layer") { Features = CreateFeatures(), IsMapInfoLayer = true },
+            .WithLayer((map) => new MemoryLayer("Pin Layer") { Features = CreateFeatures() },
                 (l, map) => l.WithPinWithCalloutLayer(map))
             .WithZoomButtons()
             .WithScaleBarWidget(w =>
@@ -41,10 +41,13 @@ public static class SampleMapBuilderExtensions
 {
     public static ILayer WithPinWithCalloutLayer(this ILayer layer, Map map)
     {
-        map.Info += (sender, args) =>
+        map.Tapped += (m, e) =>
         {
-            if (args.MapInfo.Feature?.Data is UserData data)
+            if (e.GetMapInfo([layer]).Feature?.Data is UserData data)
+            {
                 data.CalloutEnabled = !data.CalloutEnabled;
+                e.Handled = true;
+            }
         };
 
         layer.WithPinAndCallout(
@@ -63,12 +66,15 @@ public static class SampleLayerExtensions
         {
             Styles =
             {
-                new SymbolStyle
+                new ImageStyle
                 {
-                    ImageSource = "embedded://Mapsui.Resources.Images.Pin.svg",
-                    SymbolOffset = new RelativeOffset(0.0, 0.5), // The point at the bottom should be at the location
-                    SvgFillColor = Color.CornflowerBlue,
-                    SvgStrokeColor = Color.Black,
+                    Image = new Image
+                    {
+                        Source = "embedded://Mapsui.Resources.Images.Pin.svg",
+                        SvgFillColor = Color.CornflowerBlue,
+                        SvgStrokeColor = Color.Black,
+                    },
+                    RelativeOffset = new RelativeOffset(0.0, 0.5), // The point at the bottom should be at the location
                     SymbolScale = 1,
                 },
                 new ThemeStyle(f =>
@@ -76,7 +82,7 @@ public static class SampleLayerExtensions
                     return new CalloutStyle()
                     {
                         Enabled = enabledFromFeature(f),
-                        SymbolOffset = new Offset(0, 52),
+                        Offset = new Offset(0, 52),
                         TitleFont = { FontFamily = null, Size = 24, Italic = false, Bold = true },
                         TitleFontColor = Color.Black,
                         Type = CalloutType.Single,

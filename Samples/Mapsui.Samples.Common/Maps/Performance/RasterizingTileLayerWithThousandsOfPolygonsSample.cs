@@ -1,57 +1,52 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
+using Mapsui.Extensions;
 using Mapsui.Layers;
 using Mapsui.Nts.Extensions;
 using Mapsui.Nts.Providers;
 using Mapsui.Projections;
 using Mapsui.Rendering;
-using Mapsui.Rendering.Skia;
 using Mapsui.Styles;
+using Mapsui.Tiling.Fetcher;
 using Mapsui.Tiling.Layers;
-using Mapsui.UI;
 using Mapsui.Widgets;
 using Mapsui.Widgets.ButtonWidgets;
 using NetTopologySuite.Geometries;
 
-#pragma warning disable IDISP001 // Dispose created
-#pragma warning disable IDISP004 // Don't ignore created IDisposable
-
 namespace Mapsui.Samples.Common.Maps.Performance;
 
-public sealed class RasterizingTileLayerWithThousandsOfPolygonsSample : IMapControlSample, IDisposable
+public sealed class RasterizingTileLayerWithThousandsOfPolygonsSample : ISample, IDisposable
 {
     private Map? _map;
-    public string Name => "RasterizingTileLayer with Thousands of Polygons";
+
+    public string Name => "RasterizingTileLayerWithThousandsOfPolygons";
     public string Category => "Performance";
 
-    public void Setup(IMapControl mapControl)
-    {
-        mapControl.Map = CreateMap();
-    }
+    public Task<Map> CreateMapAsync() => Task.FromResult(CreateMap());
 
     public Map CreateMap()
     {
-        // Todo: Our users should not need to be aware of the DefaultRendererFactory.
-        DefaultRendererFactory.Create = () => new MapRenderer(900000);
         _map?.Dispose();
         _map = new Map();
+        _map.RenderService = new RenderService(900000);
         _map.Layers.Add(Tiling.OpenStreetMap.CreateTileLayer());
-        _map.Layers.Add(new RasterizingTileLayer(CreatePolygonLayer()));
-        var home = Mercator.FromLonLat(0, 0);
+        _map.Layers.Add(new RasterizingTileLayer(CreatePolygonLayer(), dataFetchStrategy: new MinimalDataFetchStrategy()));
+        var home = SphericalMercator.FromLonLat(0, 0).ToMPoint();
         _map.Navigator.CenterOnAndZoomTo(home, _map.Navigator.Resolutions[9]);
         _map.Widgets.Enqueue(new ButtonWidget
         {
             Text = "Change Color",
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Top,
-            Tapped = ChangeColor
+            WithTappedEvent = ChangeColor
         });
 
         return _map;
     }
 
-    private bool ChangeColor(object? sender, WidgetEventArgs e)
+    private void ChangeColor(object? sender, WidgetEventArgs e)
     {
         var layer = (_map?.Layers)?.First(f => f is RasterizingTileLayer) as RasterizingTileLayer;
         var random = new Random();
@@ -62,7 +57,6 @@ public sealed class RasterizingTileLayerWithThousandsOfPolygonsSample : IMapCont
             Fill = new Brush(color),
         };
         layer.ClearCache();
-        return false;
     }
 
     public static ILayer CreatePolygonLayer()

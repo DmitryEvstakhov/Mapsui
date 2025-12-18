@@ -1,26 +1,40 @@
 ﻿using Mapsui.Extensions;
 using Mapsui.Logging;
 using System;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Reflection;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace Mapsui.Styles;
+
 public static class ImageFetcher
 {
+    public const string EmbeddedScheme = "embedded";
+    public const string FileScheme = "file";
+    public const string HttpScheme = "http";
+    public const string HttpsScheme = "https";
+    public const string SvgContentScheme = "svg-content";
+    public const string Base64ContentScheme = "base64-content";
+
+    private static ConcurrentDictionary<string, Assembly>? _embeddedResources;
+
     public static async Task<byte[]> FetchBytesFromImageSourceAsync(string imageSource)
     {
-        var imageSourceUrl = new Uri(imageSource);
+        // Uri has a limitation of ~2000 bytes for URLs, so extract the scheme by hand
+        var scheme = imageSource.Substring(0, imageSource.IndexOf(':'));
 
-        return imageSourceUrl.Scheme switch
+        return scheme switch
         {
-            "embedded" => LoadEmbeddedResourceFromPath(imageSourceUrl),
-            "file" => LoadFromFileSystem(imageSourceUrl),
-            "http" or "https" => await LoadFromUrlAsync(imageSourceUrl),
-            _ => throw new ArgumentException($"Scheme is not supported '{imageSourceUrl.Scheme}' of '{imageSource}'"),
+            EmbeddedScheme => LoadEmbeddedResourceFromPath(new Uri(imageSource)),
+            FileScheme => LoadFromFileSystem(new Uri(imageSource)),
+            HttpScheme or HttpsScheme => await LoadFromUrlAsync(new Uri(imageSource)),
+            SvgContentScheme => LoadFromSvg(imageSource[(SvgContentScheme.Length + 3)..]),
+            Base64ContentScheme => LoadFromBase64(imageSource[(Base64ContentScheme.Length + 3)..]),
+            _ => throw new ArgumentException($"Scheme '{scheme}' of '{imageSource}' is not supported"),
         };
     }
 
@@ -28,9 +42,10 @@ public static class ImageFetcher
     {
         try
         {
-            var assemblies = GetMatchingAssemblies(imageSource);
+            if (_embeddedResources is null)
+                _embeddedResources = LoadEmbeddedResourcePaths();
 
-            foreach (var assembly in assemblies)
+            if (_embeddedResources.TryGetValue(imageSource.Host, out var assembly))
             {
                 string[] resourceNames = assembly.GetManifestResourceNames();
                 var matchingResourceName = resourceNames.FirstOrDefault(r => r.Equals(imageSource.Host, StringComparison.InvariantCultureIgnoreCase));
@@ -41,7 +56,7 @@ public static class ImageFetcher
                     return stream.ToBytes();
                 }
             }
-            var allResourceNames = assemblies.SelectMany(a => a.GetManifestResourceNames()).ToList();
+            var allResourceNames = _embeddedResources.Keys.ToList();
             string listOfEmbeddedResources = string.Concat(allResourceNames.Select(n => '\n' + n)); // All resources should be on a new line.
             throw new Exception($"Could not find the embedded resource in the current assemblies. ImageSource: '{imageSource}'. Other embedded resources in matching assemblies: {listOfEmbeddedResources}");
         }
@@ -53,20 +68,21 @@ public static class ImageFetcher
         }
     }
 
-    static private List<Assembly> GetMatchingAssemblies(Uri imageSource)
+    private static ConcurrentDictionary<string, Assembly> LoadEmbeddedResourcePaths()
     {
-        var result = new List<Assembly>();
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        var result = new ConcurrentDictionary<string, Assembly>();
+        var assemblies = AppDomain.CurrentDomain.GetAssemblies().Where(a => !a.IsDynamic);
+
+        foreach (var assembly in assemblies)
         {
-            var name = assembly.GetName().Name ?? throw new Exception($"Assembly name is null: '{assembly}'");
-            if (imageSource.Host.StartsWith(name, StringComparison.InvariantCultureIgnoreCase))
+            string[] resourceNames = assembly.GetManifestResourceNames();
+
+            foreach (var resourceName in resourceNames)
             {
-                result.Add(assembly);
+                if (!resourceName.EndsWith(".resources"))
+                    result.AddOrUpdate(resourceName.ToLower(), (r) => assembly, (r, a) => assembly);
             }
         }
-        if (!result.Any())
-            throw new Exception($"No matching assemblies found for url: '{imageSource}");
-
         return result;
     }
 
@@ -98,6 +114,34 @@ public static class ImageFetcher
         catch (Exception ex)
         {
             var message = $"Could not load resource from file '{imageSource}' : '{ex.Message}'";
+            Logger.Log(LogLevel.Error, message, ex);
+            throw new Exception(message, ex);
+        }
+    }
+
+    private static byte[] LoadFromSvg(string imageSource)
+    {
+        try
+        {
+            return Encoding.UTF8.GetBytes(imageSource);
+        }
+        catch (Exception ex)
+        {
+            var message = $"Could not load svg from string '{imageSource}' : '{ex.Message}'";
+            Logger.Log(LogLevel.Error, message, ex);
+            throw new Exception(message, ex);
+        }
+    }
+
+    private static byte[] LoadFromBase64(string imageSource)
+    {
+        try
+        {
+            return Convert.FromBase64String(imageSource);
+        }
+        catch (Exception ex)
+        {
+            var message = $"Could not load resource from base64 encoded string '{imageSource}' : '{ex.Message}'";
             Logger.Log(LogLevel.Error, message, ex);
             throw new Exception(message, ex);
         }

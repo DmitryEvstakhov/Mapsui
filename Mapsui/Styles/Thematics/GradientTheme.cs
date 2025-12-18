@@ -11,7 +11,7 @@ namespace Mapsui.Styles.Thematics;
 /// <summary>
 /// The GradientTheme class defines a gradient color thematic rendering of features based by a numeric attribute.
 /// </summary>
-public class GradientTheme : Style, IThemeStyle
+public class GradientTheme : BaseStyle, IThemeStyle
 {
     /// <summary>
     /// Gets or sets the column name from where to get the attribute value
@@ -76,7 +76,7 @@ public class GradientTheme : Style, IThemeStyle
     /// </summary>
     /// <param name="row">Feature</param>
     /// <returns>A <see cref="IStyle">Style</see> calculated by a linear interpolation between the min/max styles</returns>
-    public IStyle? GetStyle(IFeature row)
+    public IStyle? GetStyle(IFeature row, Viewport _)
     {
         double attr;
         try { attr = Convert.ToDouble(row[ColumnName]); }
@@ -88,7 +88,7 @@ public class GradientTheme : Style, IThemeStyle
         {
             (LabelStyle minLabelStyle, LabelStyle maxLabelStyle)
                 => ToInterpolatedLabelStyle(minLabelStyle, maxLabelStyle, attr, this),
-            (SymbolStyle minSymbolStyle, SymbolStyle maxSymbolStyle)
+            (ImageStyle minSymbolStyle, ImageStyle maxSymbolStyle)
                 => ToInterpolatedSymbolStyle(minSymbolStyle, maxSymbolStyle, attr, this),
             (VectorStyle minVectorStyle, VectorStyle maxVectorStyle)
                 => ToInterpolatedVectorStyle(minVectorStyle, maxVectorStyle, attr, this),
@@ -119,14 +119,14 @@ public class GradientTheme : Style, IThemeStyle
         return result;
     }
 
-    private static SymbolStyle ToInterpolatedSymbolStyle(SymbolStyle min, SymbolStyle max, double value, GradientTheme instance)
+    private static ImageStyle ToInterpolatedSymbolStyle(ImageStyle min, ImageStyle max, double value, GradientTheme instance)
     {
-        var result = new SymbolStyle();
+        var result = new ImageStyle();
 
         var fraction = Fraction(value, instance.Min, instance.Max);
 
-        result.ImageSource = (fraction > 0.5) ? min.ImageSource : max.ImageSource;
-        result.SymbolOffset = fraction > 0.5 ? min.SymbolOffset ?? new Offset() : max.SymbolOffset ?? new Offset();
+        result.Image = (fraction > 0.5) ? min.Image : max.Image;
+        result.Offset = fraction > 0.5 ? min.Offset ?? new Offset() : max.Offset ?? new Offset();
         // We don't interpolate the offset but let it follow the symbol instead
         result.SymbolScale = InterpolateDouble(min.SymbolScale, max.SymbolScale, fraction);
 

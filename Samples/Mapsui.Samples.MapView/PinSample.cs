@@ -1,12 +1,9 @@
-﻿using System;
-using System.Reflection;
+﻿using System.Reflection;
 using Mapsui.Samples.Common;
 using Mapsui.Samples.Common.PersistentCaches;
 using Mapsui.Styles;
 using Mapsui.UI;
 using Mapsui.UI.Maui;
-using Microsoft.Maui.Graphics;
-using Microsoft.Maui;
 using Mapsui.Manipulations;
 using BruTile.Predefined;
 using Mapsui.Tiling.Layers;
@@ -26,22 +23,20 @@ public class PinSample : IMapViewSample
 
     public bool UpdateLocation => true;
 
-    public bool OnTap(object? sender, EventArgs args)
+    public bool OnTap(object? s, MapClickedEventArgs e)
     {
         // The namespace prefix is somehow necessary on Linux.
-        var mapClickedArgs = (MapClickedEventArgs)args;
-
-        if (sender is not UI.Maui.MapView mapView)
+        if (s is not UI.Maui.MapView mapView)
             return false;
 
         var assembly = typeof(AllSamples).GetTypeInfo().Assembly;
         foreach (var str in assembly.GetManifestResourceNames())
             System.Diagnostics.Debug.WriteLine(str);
 
-        var position = mapClickedArgs.Point;
-        switch (mapClickedArgs.TapType)
+        var position = e.Point;
+        switch (e.GestureType)
         {
-            case TapType.Single:
+            case GestureType.SingleTap:
                 var pin = new Pin(mapView)
                 {
                     Label = $"PinType.Pin {_markerNum++}",
@@ -84,7 +79,7 @@ public class PinSample : IMapViewSample
                 }
                 pin.Callout.CalloutClicked += (s, e) =>
                 {
-                    if (e.TapType == TapType.Double)
+                    if (e.GestureType == GestureType.DoubleTap)
                     {
                         // Double click on callout moves pin
                         var p = e.Callout?.Pin;
@@ -106,7 +101,7 @@ public class PinSample : IMapViewSample
                 mapView.Pins.Add(pin);
                 pin.ShowCallout();
                 break;
-            case TapType.Double:
+            case GestureType.DoubleTap:
                 var resourceName = "embedded://Mapsui.Samples.Common.Images.Ghostscript_Tiger.svg";
                 mapView.Pins.Add(new Pin(mapView)
                 {

@@ -1,17 +1,24 @@
-﻿using System;
-using System.Diagnostics.CodeAnalysis;
-using System.IO;
-using System.IO.Compression;
-using BruTile;
+﻿using BruTile;
 using BruTile.Cache;
 using Mapsui.Cache;
 using Mapsui.Logging;
 using SQLite;
+using SQLitePCL;
+using System;
+using System.Diagnostics.CodeAnalysis;
+using System.IO;
+using System.IO.Compression;
 
 namespace Mapsui.Extensions.Cache;
 
 public class SqlitePersistentCache : IPersistentCache<byte[]>, IUrlPersistentCache
 {
+    static SqlitePersistentCache()
+    {
+        // Initialize Sqlite
+        Batteries.Init();
+    }
+
     private readonly string _file;
     private readonly TimeSpan _cacheExpireTime;
     private const string _noCompression = "no";
@@ -148,7 +155,7 @@ public class SqlitePersistentCache : IPersistentCache<byte[]>, IUrlPersistentCac
             Compression = compress.Compression,
         };
 
-        connection.Insert(data);
+        connection.Insert(data, data.GetType());
     }
 
     public void Remove(TileIndex index)
@@ -157,13 +164,12 @@ public class SqlitePersistentCache : IPersistentCache<byte[]>, IUrlPersistentCac
         connection.Table<Tile>().Delete(f => f.Level == index.Level && f.Col == index.Col && f.Row == index.Row);
     }
 
-    // Interface Definition in ITileCache is wrong TODO Fix interface in BruTile
-#pragma warning disable CS8766
     public byte[]? Find(TileIndex index)
-#pragma warning restore CS8766
     {
         using var connection = CreateConnection();
         var tile = connection.Table<Tile>().FirstOrDefault(f => f.Level == index.Level && f.Col == index.Col && f.Row == index.Row);
+        if (tile == null)
+            return null;
         if (_cacheExpireTime != TimeSpan.Zero)
         {
             if (tile.Created.Add(_cacheExpireTime) < DateTime.Now)
@@ -192,7 +198,7 @@ public class SqlitePersistentCache : IPersistentCache<byte[]>, IUrlPersistentCac
             Data = compress.data,
             Compression = compress.Compression,
         };
-        connection.InsertOrReplace(data);
+        connection.InsertOrReplace(data, data.GetType());
     }
 
     public void Remove(string url, byte[]? postData)

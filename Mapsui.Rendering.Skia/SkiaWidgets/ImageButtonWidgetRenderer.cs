@@ -1,5 +1,4 @@
-﻿using Mapsui.Rendering.Skia.Cache;
-using Mapsui.Rendering.Skia.Extensions;
+﻿using Mapsui.Rendering.Skia.Extensions;
 using Mapsui.Rendering.Skia.Images;
 using Mapsui.Widgets;
 using Mapsui.Widgets.ButtonWidgets;
@@ -14,11 +13,13 @@ public class ImageButtonWidgetRenderer : ISkiaWidgetRenderer
     {
         var button = (ImageButtonWidget)widget;
 
-        if (button.ImageSource == null)
+        if (button.Image == null)
             throw new InvalidOperationException("ImageSource is not set");
 
-        var drawableImage = renderService.DrawableImageCache.GetOrCreate(button.ImageSource,
-            () => SymbolStyleRenderer.TryCreateDrawableImage(button.ImageSource, renderService.ImageSourceCache));
+#pragma warning disable IDISP001 // The cache is responsible for disposing the items created in the cache.
+        var drawableImage = renderService.DrawableImageCache.GetOrCreate(button.Image.SourceId,
+            () => ImageStyleRenderer.TryCreateDrawableImage(button.Image, renderService.ImageSourceCache));
+#pragma warning restore IDISP001
         if (drawableImage == null)
             return;
 
@@ -41,15 +42,15 @@ public class ImageButtonWidgetRenderer : ISkiaWidgetRenderer
 
 
         using var skPaint = new SKPaint { IsAntialias = true };
-        if (drawableImage is BitmapImage bitmapImage)
+        if (drawableImage is BitmapDrawableImage bitmapImage)
         {
-            throw new Exception($"BitmapImage is not supported as {nameof(button.ImageSource)}  or {nameof(ImageButtonWidget)}");
+            throw new Exception($"BitmapImage is not supported as {nameof(button.Image.Source)}  or {nameof(ImageButtonWidget)}");
             // Todo: Implement this. It should have a tested sample. Perhaps in a separate ImageButtonWidgetSample. Things like scale and
             // rotation should be tested. Could be something like this:
             // BitmapRenderer.Draw(canvas, bitmapImage.Image,
             //    (float)button.Envelope.Centroid.X, (float)button.Envelope.Centroid.Y, (float)button.Rotation);
         }
-        else if (drawableImage is SvgImage svgImage)
+        else if (drawableImage is SvgDrawableImage svgImage)
         {
             // Rotate picture
             var matrix = SKMatrix.CreateRotationDegrees((float)button.Rotation, drawableImage.Width / 2f, drawableImage.Height / 2f);
@@ -58,7 +59,7 @@ public class ImageButtonWidgetRenderer : ISkiaWidgetRenderer
             // Translate picture to right place
             matrix = matrix.PostConcat(SKMatrix.CreateTranslation((float)(button.Envelope.MinX + button.Padding.Left), (float)(button.Envelope.MinY + button.Padding.Top)));
             // Draw picture
-            canvas.DrawPicture(svgImage.Picture, ref matrix, skPaint);
+            canvas.DrawPicture(svgImage.Picture, in matrix, skPaint);
         }
         else
             throw new NotSupportedException("DrawableImage type not supported");

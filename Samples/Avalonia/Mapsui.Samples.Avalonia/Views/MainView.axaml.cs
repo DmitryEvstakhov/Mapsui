@@ -1,13 +1,11 @@
-using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Mapsui.Extensions;
 using Mapsui.Samples.Common;
 using Mapsui.Samples.Common.Extensions;
-
 using Mapsui.Tiling;
-using Mapsui.Samples.Common.Maps.Widgets;
+using System.Linq;
 
 namespace Mapsui.Samples.Avalonia.Views;
 
@@ -15,8 +13,7 @@ public partial class MainView : UserControl
 {
     static MainView()
     {
-        Mapsui.Tests.Common.Samples.Register();
-        Mapsui.Samples.Common.Samples.Register();
+        Common.Samples.Register();
     }
 
     public MainView()
@@ -30,7 +27,6 @@ public partial class MainView : UserControl
 
         MapControl.Map.Layers.Add(OpenStreetMap.CreateTileLayer());
         MapControl.Map.Navigator.RotationLock = false;
-        MapControl.Renderer.WidgetRenders[typeof(CustomWidget)] = new CustomWidgetSkiaRenderer();
 
         RotationSlider.PointerMoved += RotationSliderOnPointerMoved;
 
@@ -43,7 +39,6 @@ public partial class MainView : UserControl
     private void FillComboBoxWithCategories()
     {
         Common.Samples.Register();
-        Tests.Common.Samples.Register();
 
         var categories = AllSamples.GetSamples().Select(s => s.Category).Distinct().OrderBy(c => c).ToArray();
 
@@ -76,7 +71,7 @@ public partial class MainView : UserControl
             Margin = new Thickness(4)
         };
 
-        radioButton.Click += (s, a) =>
+        radioButton.Click += (s, e) =>
         {
             Catch.Exceptions(async () =>
             {

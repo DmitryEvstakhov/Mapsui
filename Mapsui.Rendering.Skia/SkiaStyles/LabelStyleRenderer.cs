@@ -11,8 +11,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Mapsui.Extensions;
-using Mapsui.Rendering.Skia.Cache;
 using Mapsui.Rendering.Skia.Images;
+using Mapsui.Rendering.Caching;
 
 namespace Mapsui.Rendering.Skia;
 
@@ -24,25 +24,15 @@ public class LabelStyleRenderer : ISkiaStyleRenderer, IFeatureSize
 
         using var holder = vectorCache.GetOrCreate((style, text, layerOpacity), CreateLabelAsBitmap);
         var image = holder.Instance;
-        var offsetX = style.Offset is RelativeOffset ? image.Width * style.Offset.X : style.Offset.X;
-        var offsetY = style.Offset is RelativeOffset ? image.Height * style.Offset.Y : style.Offset.Y;
+        var offset = style.Offset.Combine(style.RelativeOffset.GetAbsoluteOffset(image.Width, image.Height));
 
-        if (image is BitmapImage bitmapImage)
+        if (image is BitmapDrawableImage bitmapImage)
             BitmapRenderer.Draw(canvas, bitmapImage.Image, (int)Math.Round(x), (int)Math.Round(y),
-                offsetX: (float)offsetX, offsetY: (float)-offsetY,
+                offsetX: (float)offset.X, offsetY: (float)-offset.Y,
                 horizontalAlignment: style.HorizontalAlignment, verticalAlignment: style.VerticalAlignment);
         else
             throw new InvalidOperationException("Unexpected drawable image type");
     }
-
-    public static SKTypeface CreateTypeFace(Font font)
-    {
-        return SKTypeface.FromFamilyName(font.FontFamily,
-            font.Bold ? SKFontStyleWeight.Bold : SKFontStyleWeight.Normal,
-            SKFontStyleWidth.Normal,
-            font.Italic ? SKFontStyleSlant.Italic : SKFontStyleSlant.Upright);
-    }
-
 
     public bool Draw(SKCanvas canvas, Viewport viewport, ILayer layer, IFeature feature, IStyle style, RenderService renderService, long iteration)
     {
@@ -83,20 +73,20 @@ public class LabelStyleRenderer : ISkiaStyleRenderer, IFeatureSize
         return true;
     }
 
-    private static IDrawableImage CreateLabelAsBitmap((LabelStyle Style, string? Text, float LayerOpacity) valueTuple, IRenderService renderService)
+    private static IDrawableImage CreateLabelAsBitmap((LabelStyle Style, string? Text, float LayerOpacity) valueTuple, RenderService renderService)
     {
         var style = valueTuple.Style;
         var layerOpacity = valueTuple.LayerOpacity;
-        var vectorCache = ((RenderService)renderService).VectorCache;
-        using var paintHolder = vectorCache.GetOrCreate((style.Font, style.ForeColor, layerOpacity), CreatePaint);
+        using var fontHolder = renderService.VectorCache.GetOrCreate(style.Font, CreateFont);
+        using var paintHolder = renderService.VectorCache.GetOrCreate((style.ForeColor, layerOpacity), CreatePaint);
         var paint = paintHolder.Instance;
-        return new BitmapImage(CreateLabelAsImage(style, valueTuple.Text, paint, layerOpacity));
+        var font = fontHolder.Instance;
+        return new BitmapDrawableImage(CreateLabelAsImage(style, valueTuple.Text, font, paint, layerOpacity));
     }
 
-    private static SKImage CreateLabelAsImage(LabelStyle style, string? text, SKPaint paint, float layerOpacity)
+    private static SKImage CreateLabelAsImage(LabelStyle style, string? text, SKFont skFont, SKPaint paint, float layerOpacity)
     {
-        var rect = new SKRect();
-        paint.MeasureText(text, ref rect);
+        skFont.MeasureText(text, out var rect, paint);
 
         var backRect = new SKRect(0, 0, rect.Width + 6, rect.Height + 6);
 
@@ -109,15 +99,17 @@ public class LabelStyleRenderer : ISkiaStyleRenderer, IFeatureSize
         canvas.Clear();
 
         DrawBackground(style, backRect, canvas, layerOpacity);
-        canvas.DrawText(text, -rect.Left + 3, -rect.Top + 3, paint);
+        // Important: compensate both vertical (-rect.Top) and horizontal (-rect.Left)
+        canvas.DrawText(text, -rect.Left + 3, -rect.Top + rect.Top + 3, SKTextAlign.Left, skFont, paint);
         return image;
     }
 
-    private void DrawLabel(SKCanvas target, float x, float y, LabelStyle style, string? text, float layerOpacity, IRenderService renderService)
+    private static void DrawLabel(SKCanvas target, float x, float y, LabelStyle style, string? text, float layerOpacity, RenderService renderService)
     {
-        var vectorCache = ((RenderService)renderService).VectorCache;
-        using var paintHolder = vectorCache.GetOrCreate((style.Font, style.ForeColor, layerOpacity), CreatePaint);
+        using var fontHolder = renderService.VectorCache.GetOrCreate(style.Font, CreateFont);
+        using var paintHolder = renderService.VectorCache.GetOrCreate((style.ForeColor, layerOpacity), CreatePaint);
         var paint = paintHolder.Instance;
+        var font = fontHolder.Instance;
 
         var rect = new SKRect();
 
@@ -130,23 +122,25 @@ public class LabelStyleRenderer : ISkiaStyleRenderer, IFeatureSize
         // Get default values for unit em
         if (style.MaxWidth > 0 || hasNewline)
         {
-            paint.MeasureText("M", ref rect);
-            emHeight = paint.FontSpacing;
+            font.MeasureText("M", out rect, paint);
+            emHeight = font.Spacing;
             maxWidth = (float)style.MaxWidth * rect.Width;
         }
 
-        paint.MeasureText(text, ref rect);
+        font.MeasureText(text, out rect, paint);
 
-        var baseline = -rect.Top;  // Distance from top to baseline of text
+        // Baseline is distance from top of bounds to baseline
+        var baseline = -rect.Top;
 
+        // We will use bounding box width/height (Right-Left, Bottom-Top), not advance width
         var drawRect = new SKRect(0, 0, rect.Right - rect.Left, rect.Bottom - rect.Top);
 
         if ((style.MaxWidth > 0 && drawRect.Width > maxWidth) || hasNewline)
         {
-            // Text has a line feed or should be shorten by character wrap
+            // Text has a line feed or should be shortened by character wrap
             if (hasNewline || style.WordWrap == LabelStyle.LineBreakMode.CharacterWrap)
             {
-                lines = SplitLines(text, paint, hasNewline ? drawRect.Width : maxWidth, string.Empty);
+                lines = SplitLines(text, font, paint, hasNewline ? drawRect.Width : maxWidth, string.Empty);
                 var width = 0f;
                 for (var i = 0; i < lines.Length; i++)
                 {
@@ -157,10 +151,10 @@ public class LabelStyleRenderer : ISkiaStyleRenderer, IFeatureSize
                 drawRect = new SKRect(0, 0, width, (float)(drawRect.Height + style.LineHeight * emHeight * (lines.Length - 1)));
             }
 
-            // Text is to long, so wrap it by words
+            // Text is too long, so wrap it by words
             if (style.WordWrap == LabelStyle.LineBreakMode.WordWrap)
             {
-                lines = SplitLines(text, paint, maxWidth, " ");
+                lines = SplitLines(text, font, paint, maxWidth, " ");
                 var width = 0f;
                 for (var i = 0; i < lines.Length; i++)
                 {
@@ -171,42 +165,42 @@ public class LabelStyleRenderer : ISkiaStyleRenderer, IFeatureSize
                 drawRect = new SKRect(0, 0, width, (float)(drawRect.Height + style.LineHeight * emHeight * (lines.Length - 1)));
             }
 
-            // Shorten it at beginning
+            // Shorten at beginning
             if (style.WordWrap == LabelStyle.LineBreakMode.HeadTruncation)
             {
                 var result = text?[(text.Length - (int)style.MaxWidth - 2)..];
-                while (result?.Length > 1 && paint.MeasureText("..." + result) > maxWidth)
+                while (result?.Length > 1 && font.MeasureText("..." + result, paint) > maxWidth)
                     result = result[1..];
                 text = "..." + result;
-                paint.MeasureText(text, ref rect);
+                font.MeasureText(text, out rect, paint);
                 drawRect = new SKRect(0, 0, rect.Right - rect.Left, rect.Bottom - rect.Top);
             }
 
-            // Shorten it at end
+            // Shorten at end
             if (style.WordWrap == LabelStyle.LineBreakMode.TailTruncation)
             {
                 var result = text?[..((int)style.MaxWidth + 2)];
-                while (result?.Length > 1 && paint.MeasureText(result + "...") > maxWidth)
+                while (result?.Length > 1 && font.MeasureText(result + "...", paint) > maxWidth)
                     result = result[..^1];
                 text = result + "...";
-                paint.MeasureText(text, ref rect);
+                font.MeasureText(text, out rect, paint);
                 drawRect = new SKRect(0, 0, rect.Right - rect.Left, rect.Bottom - rect.Top);
             }
 
-            // Shorten it in the middle
+            // Shorten in the middle
             if (style.WordWrap == LabelStyle.LineBreakMode.MiddleTruncation)
             {
                 var result1 = text?[..((int)(style.MaxWidth / 2) + 1)];
                 var result2 = text?[(text.Length - (int)(style.MaxWidth / 2) - 1)..];
                 while (result1?.Length > 1 && result2?.Length > 1 &&
-                       paint.MeasureText(result1 + "..." + result2) > maxWidth)
+                       font.MeasureText(result1 + "..." + result2, paint) > maxWidth)
                 {
                     result1 = result1[..^1];
                     result2 = result2[1..];
                 }
 
                 text = result1 + "..." + result2;
-                paint.MeasureText(text, ref rect);
+                font.MeasureText(text, out rect, paint);
                 drawRect = new SKRect(0, 0, rect.Right - rect.Left, rect.Bottom - rect.Top);
             }
         }
@@ -214,14 +208,36 @@ public class LabelStyleRenderer : ISkiaStyleRenderer, IFeatureSize
         var horizontalAlign = CalcHorizontalAlignment(style.HorizontalAlignment);
         var verticalAlign = CalcVerticalAlignment(style.VerticalAlignment);
 
-        var offsetX = style.Offset is RelativeOffset ? drawRect.Width * style.Offset.X : style.Offset.X;
-        var offsetY = style.Offset is RelativeOffset ? drawRect.Height * style.Offset.Y : style.Offset.Y;
+        // If we have multiple lines, measure true bounding widths/left bearings per line and use those for alignment and background width
+        if (lines != null && lines.Length > 0)
+        {
+            float maxBoundWidth = 0f;
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (string.IsNullOrEmpty(lines[i].Value))
+                {
+                    lines[i].BoundsLeft = 0;
+                    lines[i].BoundsWidth = 0;
+                    continue;
+                }
+
+                font.MeasureText(lines[i].Value, out var lineRect, paint);
+                lines[i].BoundsLeft = lineRect.Left;                       // may be negative
+                lines[i].BoundsWidth = lineRect.Right - lineRect.Left;     // bounding width
+                if (lines[i].BoundsWidth > maxBoundWidth) maxBoundWidth = lines[i].BoundsWidth;
+            }
+
+            // Replace drawRect width with bounding-based max width while keeping the previously computed height
+            drawRect = new SKRect(0, 0, maxBoundWidth, drawRect.Height);
+        }
+
+        var offset = style.Offset.Combine(style.RelativeOffset.GetAbsoluteOffset(drawRect.Width, drawRect.Height));
 
         drawRect.Offset(
-            x - drawRect.Width * horizontalAlign + (float)offsetX,
-            y - drawRect.Height * verticalAlign + (float)offsetY);
+            x - drawRect.Width * horizontalAlign + (float)offset.X,
+            y - drawRect.Height * verticalAlign + (float)offset.Y);
 
-        // If style has a background color, than draw background rectangle
+        // If style has a background color, draw background rectangle
         if (style.BackColor != null)
         {
             var backRect = drawRect;
@@ -229,43 +245,59 @@ public class LabelStyleRenderer : ISkiaStyleRenderer, IFeatureSize
             DrawBackground(style, backRect, target, layerOpacity);
         }
 
-        // If style has a halo value, than draw halo text
+        // Halo
         if (style.Halo != null)
         {
-            using var paintHaloHolder = vectorCache.GetOrCreate((style, style.Halo), CreateHaloPaintHolder);
+            using var paintHaloHolder = renderService.VectorCache.GetOrCreate((style, style.Halo), CreateHaloPaintHolder);
             using var paintHalo = paintHaloHolder.Instance;
+
             if (lines != null)
             {
                 var left = drawRect.Left;
                 foreach (var line in lines)
                 {
-                    if (style.HorizontalAlignment == LabelStyle.HorizontalAlignmentEnum.Center)
-                        target.DrawText(line.Value, (float)(left + (drawRect.Width - line.Width) * 0.5), drawRect.Top + line.Baseline, paintHalo);
-                    else if (style.HorizontalAlignment == LabelStyle.HorizontalAlignmentEnum.Right)
-                        target.DrawText(line.Value, left + drawRect.Width - line.Width, drawRect.Top + line.Baseline, paintHalo);
-                    else
-                        target.DrawText(line.Value, left, drawRect.Top + line.Baseline, paintHalo);
+                    // For alignment, use bounding widths and compensate left bearing (line.BoundsLeft)
+                    float desiredLeft =
+                        style.HorizontalAlignment == LabelStyle.HorizontalAlignmentEnum.Center
+                            ? (float)(left + (drawRect.Width - line.BoundsWidth) * 0.5)
+                            : style.HorizontalAlignment == LabelStyle.HorizontalAlignmentEnum.Right
+                                ? left + drawRect.Width - line.BoundsWidth
+                                : left;
+
+                    // Origin x = desiredLeft - boundsLeft so that the bounding box's left edge equals desiredLeft
+                    float originX = desiredLeft - line.BoundsLeft;
+                    target.DrawText(line.Value, originX, drawRect.Top + line.Baseline, SKTextAlign.Left, font, paintHalo);
                 }
             }
             else
-                target.DrawText(text, drawRect.Left, drawRect.Top + baseline, paintHalo);
+            {
+                // Single line: compensate horizontal left bearing with -rect.Left
+                target.DrawText(text, drawRect.Left - rect.Left, drawRect.Top + baseline, SKTextAlign.Left, font, paintHalo);
+            }
         }
 
+        // Text
         if (lines != null)
         {
             var left = drawRect.Left;
             foreach (var line in lines)
             {
-                if (style.HorizontalAlignment == LabelStyle.HorizontalAlignmentEnum.Center)
-                    target.DrawText(line.Value, (float)(left + (drawRect.Width - line.Width) * 0.5), drawRect.Top + line.Baseline, paint);
-                else if (style.HorizontalAlignment == LabelStyle.HorizontalAlignmentEnum.Right)
-                    target.DrawText(line.Value, left + drawRect.Width - line.Width, drawRect.Top + line.Baseline, paint);
-                else
-                    target.DrawText(line.Value, left, drawRect.Top + line.Baseline, paint);
+                float desiredLeft =
+                    style.HorizontalAlignment == LabelStyle.HorizontalAlignmentEnum.Center
+                        ? (float)(left + (drawRect.Width - line.BoundsWidth) * 0.5)
+                        : style.HorizontalAlignment == LabelStyle.HorizontalAlignmentEnum.Right
+                            ? left + drawRect.Width - line.BoundsWidth
+                            : left;
+
+                float originX = desiredLeft - line.BoundsLeft;
+                target.DrawText(line.Value, originX, drawRect.Top + line.Baseline, SKTextAlign.Left, font, paint);
             }
         }
         else
-            target.DrawText(text, drawRect.Left, drawRect.Top + baseline, paint);
+        {
+            // Single line: compensate horizontal left bearing with -rect.Left
+            target.DrawText(text, drawRect.Left - rect.Left, drawRect.Top + baseline, SKTextAlign.Left, font, paint);
+        }
     }
 
     private static float CalcHorizontalAlignment(LabelStyle.HorizontalAlignmentEnum horizontalAlignment)
@@ -307,29 +339,43 @@ public class LabelStyleRenderer : ISkiaStyleRenderer, IFeatureSize
         }
     }
 
-    private static SKPaint CreatePaint((Font Font, Color ForeColor, float LayerOpacity) style, IRenderService renderService)
+    private static SKPaint CreatePaint((Color ForeColor, float LayerOpacity) style)
     {
-        var vectorCache = ((RenderService)renderService).VectorCache;
-        using var typeface = vectorCache.GetOrCreate(style.Font, CreateTypeFace);
-
         SKPaint paint = new()
         {
             IsAntialias = true,
             IsStroke = false,
-            FakeBoldText = false,
-            IsEmbeddedBitmapText = true,
             Style = SKPaintStyle.Fill,
-            TextSize = (float)style.Font.Size,
             Color = style.ForeColor.ToSkia(style.LayerOpacity),
-            Typeface = typeface.Instance
         };
 
         return paint;
     }
 
-    private static SKPaint CreatePaint((Font Font, Color ForeColor, float LayerOpacity, SKPaintStyle PaintStyle, float StrokeWidth) style, IRenderService renderService)
+    private static SKFont CreateFont(Font font)
     {
-        var paint = CreatePaint((style.Font, style.ForeColor, style.LayerOpacity), renderService);
+        var typeface = SKTypeface.FromFamilyName(font.FontFamily,
+            font.Bold ? SKFontStyleWeight.Bold : SKFontStyleWeight.Normal,
+            SKFontStyleWidth.Normal,
+            font.Italic ? SKFontStyleSlant.Italic : SKFontStyleSlant.Upright);
+
+        SKFont skFont = new()
+        {
+            Embolden = false,
+            //EmbeddedBitmaps = true,
+            Size = (float)font.Size,
+            Typeface = typeface,
+            //Subpixel = true,
+            //Hinting = SKFontHinting.None,
+            //Edging = SKFontEdging.Antialias,
+        };
+
+        return skFont;
+    }
+
+    private static SKPaint CreatePaint((Font Font, Color ForeColor, float LayerOpacity, SKPaintStyle PaintStyle, float StrokeWidth) style)
+    {
+        var paint = CreatePaint((style.ForeColor, style.LayerOpacity));
         paint.Style = style.PaintStyle;
         paint.StrokeWidth = style.StrokeWidth;
         return paint;
@@ -338,16 +384,18 @@ public class LabelStyleRenderer : ISkiaStyleRenderer, IFeatureSize
     private class Line
     {
         public string? Value { get; set; }
-        public float Width { get; set; }
-        public float Baseline { get; set; }
+        public float Width { get; set; } // Advance width used for wrapping decisions
+        public float Baseline { get; set; } // Baseline y for the line
+        public float BoundsLeft { get; set; } // Measured bounding box left (can be negative)
+        public float BoundsWidth { get; set; } // Measured bounding box width
     }
 
-    private static Line[] SplitLines(string? text, SKPaint paint, float maxWidth, string splitCharacter)
+    private static Line[] SplitLines(string? text, SKFont font, SKPaint paint, float maxWidth, string splitCharacter)
     {
         if (text == null)
             return [];
 
-        var spaceWidth = paint.MeasureText(" ");
+        var spaceWidth = font.MeasureText(" ", paint);
         var lines = text.Split('\n');
 
         return lines.SelectMany(line =>
@@ -369,7 +417,7 @@ public class LabelStyleRenderer : ISkiaStyleRenderer, IFeatureSize
             float width = 0;
             foreach (var word in words)
             {
-                var wordWidth = paint.MeasureText(word);
+                var wordWidth = font.MeasureText(word, paint);
                 var wordWithSpaceWidth = wordWidth + spaceWidth;
                 var wordWithSpace = word + splitCharacter;
 
@@ -394,54 +442,55 @@ public class LabelStyleRenderer : ISkiaStyleRenderer, IFeatureSize
 
     bool IFeatureSize.NeedsFeature => true;
 
-    double IFeatureSize.FeatureSize(IStyle style, IRenderService renderingService, IFeature? feature)
+    double IFeatureSize.FeatureSize(IStyle style, RenderService renderService, IFeature? feature)
     {
-        var skiaRenderService = (RenderService)renderingService;
-        if (feature == null) throw new ArgumentNullException(nameof(feature));
+        ArgumentNullException.ThrowIfNull(feature);
 
         if (style is LabelStyle labelStyle)
         {
-            return FeatureSize(feature, labelStyle, skiaRenderService);
+            return FeatureSize(feature, labelStyle, renderService);
         }
 
         return 0;
     }
 
-    public static double FeatureSize(IFeature feature, LabelStyle labelStyle, IRenderService renderService)
+    public static double FeatureSize(IFeature feature, LabelStyle labelStyle, RenderService renderService)
     {
-        VectorCache vectorCache = ((RenderService)renderService).VectorCache;
         var text = labelStyle.GetLabelText(feature);
 
         if (string.IsNullOrEmpty(text))
             return 0;
 
         // for measuring the text size the opacity can be set to 1try
-        using var paintHolder = labelStyle.Halo != null ? vectorCache.GetOrCreate((labelStyle, labelStyle.Halo), CreateHaloPaintHolder) : vectorCache.GetOrCreate((labelStyle.Font, labelStyle.ForeColor, 1f), CreatePaint);
+        using var fontHolder = renderService.VectorCache.GetOrCreate(labelStyle.Font, CreateFont);
+        using var paintHolder = labelStyle.Halo != null
+            ? renderService.VectorCache.GetOrCreate((labelStyle, labelStyle.Halo), CreateHaloPaintHolder)
+            : renderService.VectorCache.GetOrCreate((labelStyle.ForeColor, 1f), CreatePaint);
         var paint = paintHolder.Instance;
-        var rect = new SKRect();
-        paint.MeasureText(text, ref rect);
+        var font = fontHolder.Instance;
+        font.MeasureText(text, out var rect, paint);
 
         double size = Math.Max(rect.Width, rect.Height);
 
         var drawRect = new SKRect(0, 0, rect.Right - rect.Left, rect.Bottom - rect.Top);
 
-        var offset = labelStyle.Offset.CalcOffset(drawRect.Width, drawRect.Height);
+        var offset = labelStyle.Offset.Combine(labelStyle.RelativeOffset.GetAbsoluteOffset(drawRect.Width, drawRect.Height));
 
         // Pythagoras for maximal distance
         var length = Math.Sqrt(offset.X * offset.X + offset.Y * offset.Y);
 
         // add offset to size multiplied by two because the total size increased by the offset
-        size += (length * 2);
+        size += length * 2;
 
         return size;
     }
 
-    private static SKPaint CreateHaloPaintHolder((LabelStyle labelStyle, Pen halo) style, IRenderService renderService)
+    private static SKPaint CreateHaloPaintHolder((LabelStyle labelStyle, Pen halo) style)
     {
         LabelStyle labelStyle = style.labelStyle;
         Pen halo = style.halo;
         var strokeWidth = (float)halo!.Width * 2;
         var paintStyle = SKPaintStyle.StrokeAndFill;
-        return CreatePaint((labelStyle.Font, halo.Color, 1, paintStyle, strokeWidth), renderService);
+        return CreatePaint((labelStyle.Font, halo.Color, 1, paintStyle, strokeWidth));
     }
 }

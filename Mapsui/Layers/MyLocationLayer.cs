@@ -19,16 +19,16 @@ public class MyLocationLayer : BaseLayer, IDisposable
 {
     private readonly Map _map;
     private readonly PointFeature _feature;
-    private readonly SymbolStyle _locStyle;  // style for the location indicator
-    private readonly SymbolStyle _dirStyle;  // style for the view-direction indicator
+    private readonly ImageStyle _locStyle;  // style for the location indicator
+    private readonly ImageStyle _dirStyle;  // style for the view-direction indicator
     private readonly CalloutStyle _coStyle;  // style for the callout
 
     private static readonly string _movingImageSource = "embedded://Mapsui.Resources.Images.MyLocationMoving.svg";
     private static readonly string _stillImageSource = "embedded://Mapsui.Resources.Images.MyLocationStill.svg";
     private static readonly string _directionImageSource = "embedded://Mapsui.Resources.Images.MyLocationDir.svg";
 
-    private MPoint? _animationMyLocationStart;
-    private MPoint? _animationMyLocationEnd;
+    private MPoint? _animationStart;
+    private MPoint? _animationEnd;
 
     private readonly ConcurrentHashSet<AnimationEntry<Map>> _animations = [];
     private readonly List<IFeature> _features;
@@ -49,7 +49,7 @@ public class MyLocationLayer : BaseLayer, IDisposable
             if (_isMoving != value)
             {
                 _isMoving = value;
-                _locStyle.ImageSource = _isMoving ? _movingImageSource : _stillImageSource;
+                _locStyle.Image = _isMoving ? _movingImageSource : _stillImageSource;
             }
         }
     }
@@ -127,7 +127,7 @@ public class MyLocationLayer : BaseLayer, IDisposable
     /// <summary>
     /// This event is triggered whenever the MyLocation symbol or label is clicked.
     /// </summary>
-    public event EventHandler<MapInfoEventArgs>? Clicked;
+    public event EventHandler<MapEventArgs>? Tapped;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="T:Mapsui.Layers.MyLocationLayer"/> class
@@ -149,33 +149,32 @@ public class MyLocationLayer : BaseLayer, IDisposable
         ArgumentNullException.ThrowIfNull(map);
 
         _map = map;
-        _map.Info += HandleClicked;
+        _map.Tapped += MapTapped;
 
         Enabled = true;
-        IsMapInfoLayer = true;
 
         _feature = new PointFeature(_myLocation)
         {
             ["Label"] = "MyLocation",
         };
 
-        _locStyle = new SymbolStyle
+        _locStyle = new ImageStyle
         {
             Enabled = true,
-            ImageSource = _stillImageSource,
+            Image = _stillImageSource,
             SymbolScale = Scale,
             SymbolRotation = Direction,
-            SymbolOffset = new Offset(0, 0),
+            Offset = new Offset(0, 0),
             Opacity = 1,
         };
 
-        _dirStyle = new SymbolStyle
+        _dirStyle = new ImageStyle
         {
             Enabled = false,
-            ImageSource = _directionImageSource,
+            Image = _directionImageSource,
             SymbolScale = 0.2,
             SymbolRotation = 0,
-            SymbolOffset = new Offset(0, 0),
+            Offset = new Offset(0, 0),
             Opacity = 1,
         };
 
@@ -188,7 +187,7 @@ public class MyLocationLayer : BaseLayer, IDisposable
             MaxWidth = 300,
             RotateWithMap = true,
             SymbolOffsetRotatesWithMap = true,
-            SymbolOffset = new Offset(0, -SymbolStyle.DefaultHeight * 0.4f),
+            Offset = new Offset(0, -SymbolStyle.DefaultHeight * 0.4f),
             BalloonDefinition = new CalloutBalloonDefinition
             {
                 Color = Color.White,
@@ -227,15 +226,16 @@ public class MyLocationLayer : BaseLayer, IDisposable
             if (animated)
             {
                 // Save values for new animation
-                _animationMyLocationStart = MyLocation;
-                _animationMyLocationEnd = newLocation;
-                var deltaX = _animationMyLocationEnd.X - _animationMyLocationStart.X;
-                var deltaY = _animationMyLocationEnd.Y - _animationMyLocationStart.Y;
+                _animationStart = MyLocation;
+                _animationEnd = newLocation;
+                var deltaX = _animationEnd.X - _animationStart.X;
+                var deltaY = _animationEnd.Y - _animationStart.Y;
 
                 if (_map.Navigator.Viewport.ToExtent() is not null)
                 {
-                    // Refresh the destination viewport at the start of the animation so it has time to load.
-                    _map.RefreshData(CreateDestinationFetchInfo(_map, _animationMyLocationEnd));
+                    // Refresh the end viewport at the start of the animation so it has time to load.
+                    var endViewport = _map.Navigator.Viewport with { CenterX = _animationEnd.X, CenterY = _animationEnd.Y };
+                    _map.RefreshData(endViewport);
 
                     _animationMyLocation = new AnimationEntry<Map>(
                         MyLocation,
@@ -244,14 +244,14 @@ public class MyLocationLayer : BaseLayer, IDisposable
                         animationEnd: 1,
                         tick: (map, entry, v) =>
                         {
-                            var modified = InternalUpdateMyLocation(new MPoint(_animationMyLocationStart.X + deltaX * v, _animationMyLocationStart.Y + deltaY * v));
+                            var modified = InternalUpdateMyLocation(new MPoint(_animationStart.X + deltaX * v, _animationStart.Y + deltaY * v));
                             return new AnimationResult<Map>(map, true);
                         },
                         final: (map, entry) =>
                         {
-                            if (!MyLocation.Equals(_animationMyLocationEnd))
+                            if (!MyLocation.Equals(_animationEnd))
                             {
-                                InternalUpdateMyLocation(_animationMyLocationEnd);
+                                InternalUpdateMyLocation(_animationEnd);
                             }
 
                             return new AnimationResult<Map>(map, false);
@@ -263,7 +263,7 @@ public class MyLocationLayer : BaseLayer, IDisposable
                     // Update viewport
                     if (_isCentered)
                     {
-                        _map?.Navigator.CenterOn(_animationMyLocationEnd, 1000, Easing.Linear);
+                        _map?.Navigator.CenterOn(_animationEnd, 1000, Easing.Linear);
                     }
                 }
             }
@@ -278,12 +278,6 @@ public class MyLocationLayer : BaseLayer, IDisposable
                 }
             }
         }
-    }
-
-    private static FetchInfo CreateDestinationFetchInfo(Map map, MPoint destination)
-    {
-        var destinationViewport = map.Navigator.Viewport with { CenterX = destination.X, CenterY = destination.Y };
-        return new FetchInfo(destinationViewport.ToSection(), map.CRS, ChangeType.Discrete);
     }
 
     /// <summary>
@@ -498,11 +492,13 @@ public class MyLocationLayer : BaseLayer, IDisposable
         return modified;
     }
 
-    private void HandleClicked(object? sender, MapInfoEventArgs e)
+    private void MapTapped(object? s, MapEventArgs e)
     {
-        if (e.MapInfo?.Feature != null && e.MapInfo.Feature.Equals(_feature))
+        var mapInfo = e.GetMapInfo([this]);
+        if (mapInfo.Feature != null && mapInfo.Feature.Equals(_feature))
         {
-            Clicked?.Invoke(this, e);
+            Tapped?.Invoke(this, e);
+            e.Handled = true;
         }
     }
 }

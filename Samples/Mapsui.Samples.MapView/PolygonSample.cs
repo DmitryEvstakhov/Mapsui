@@ -1,8 +1,6 @@
-﻿using System;
-using Mapsui.Samples.Common.Maps.Demo;
+﻿using Mapsui.Samples.Common.Maps.Basic;
 using Mapsui.UI;
 using Mapsui.UI.Maui;
-using Microsoft.Maui.Graphics;
 
 namespace Mapsui.Samples.Maui;
 
@@ -16,13 +14,9 @@ public class PolygonSample : IMapViewSample
 
     public bool UpdateLocation => true;
 
-    public bool OnTap(object? sender, EventArgs args)
+    public bool OnTap(object? s, MapClickedEventArgs e)
     {
-        var mapView = sender as UI.Maui.MapView;
-        var e = args as MapClickedEventArgs;
-
-        if (e == null)
-            return false;
+        var mapView = s as UI.Maui.MapView;
 
         var center = new Position(e.Point);
         var diffX = random.Next(0, 1000) / 100.0;
@@ -64,6 +58,6 @@ public class PolygonSample : IMapViewSample
 
     public void Setup(IMapControl mapControl)
     {
-        mapControl.Map = OsmSample.CreateMap();
+        mapControl.Map = OpenStreetMapSample.CreateMap();
     }
 }

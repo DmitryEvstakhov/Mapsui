@@ -13,8 +13,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
-#pragma warning disable IDISP004 // Don't ignore created IDisposable
-
 namespace Mapsui.Samples.Common.Maps.Geometries;
 
 public class PointsSample : ISample
@@ -30,7 +28,7 @@ public class PointsSample : ISample
         map.Layers.Add(CreatePointLayer());
         map.Navigator.CenterOnAndZoomTo(map.Layers.Get(1).Extent!.Centroid, map.Navigator.Resolutions[5]);
 
-        map.Widgets.Add(new MapInfoWidget(map));
+        map.Widgets.Add(new MapInfoWidget(map, l => l.Name == "Points"));
 
         return Task.FromResult(map);
     }
@@ -40,7 +38,6 @@ public class PointsSample : ISample
         return new MemoryLayer
         {
             Name = "Points",
-            IsMapInfoLayer = true,
             Features = GetCitiesFromEmbeddedResource(),
             Style = CreateBitmapStyle()
         };
@@ -59,7 +56,7 @@ public class PointsSample : ISample
             feature["name"] = c.Name;
             feature["country"] = c.Country;
             return feature;
-        });
+        }).ToArray();
     }
 
     internal class City
@@ -75,11 +72,11 @@ public class PointsSample : ISample
         return JsonSerializer.Deserialize(stream, PointsSampleContext.Default.ListCity) ?? [];
     }
 
-    private static SymbolStyle CreateBitmapStyle()
+    private static ImageStyle CreateBitmapStyle()
     {
         var imageSource = "embedded://Mapsui.Samples.Common.Images.home.png"; // Designed by Freepik http://www.freepik.com
         var bitmapHeight = 176; // To set the offset correct we need to know the bitmap height
-        return new SymbolStyle { ImageSource = imageSource, SymbolScale = 0.20, SymbolOffset = new Offset(0, bitmapHeight * 0.5) };
+        return new ImageStyle { Image = imageSource, SymbolScale = 0.20, Offset = new Offset(0, bitmapHeight * 0.5) };
     }
 }
 

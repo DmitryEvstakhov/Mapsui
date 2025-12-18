@@ -11,13 +11,11 @@ using System.Net;
 using System.Threading.Tasks;
 using Mapsui.Providers;
 
-#pragma warning disable IDISP001 // Dispose created
-
 namespace Mapsui.Samples.Common.Maps.WFS;
 
 public class WfsGeometryFilterSample : ISample
 {
-    public string Name => "WFS Geometry Filter";
+    public string Name => "WfsGeometryFilter";
     public string Category => "WFS";
 
     private const string wfsUri = "https://sgx.geodatenzentrum.de/wfs_vg2500";
@@ -37,7 +35,7 @@ public class WfsGeometryFilterSample : ISample
             map.Layers.Add(CreateWfsLayer(filterProvider));
             map.Layers.Add(CreateLabelLayer(filterProvider));
 
-            map.Widgets.Add(new MapInfoWidget(map));
+            map.Widgets.Add(new MapInfoWidget(map, l => l.Name == layerName));
 
             map.Navigator.CenterOnAndZoomTo(new MPoint(964406.63616331492, 6055489.2309588827), map.Navigator.Resolutions[10]);
 
@@ -57,7 +55,6 @@ public class WfsGeometryFilterSample : ISample
         {
             Style = new VectorStyle { Fill = new Brush { Color = Color.FromArgb(192, 255, 0, 0) } },
             DataSource = provider,
-            IsMapInfoLayer = true
         };
     }
 

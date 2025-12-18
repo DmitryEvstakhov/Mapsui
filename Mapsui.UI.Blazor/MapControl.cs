@@ -14,17 +14,16 @@ public partial class MapControl : ComponentBase, IMapControl
     protected SKCanvasView? _viewCpu;
     protected SKGLView? _viewGpu;
     protected readonly string _elementId = Guid.NewGuid().ToString("N");
-    private SKImageInfo? _canvasSize;
     private bool _onLoaded;
-    private double _pixelDensityFromInterop = 1;
-    private BoundingClientRect _clientRect = new();
+    private float? _pixelDensityFromInterop;
+    private BoundingClientRect _clientRect = new(); // We need to know the offset for touch.
     private MapsuiJsInterop? _interop;
     private readonly ManipulationTracker _manipulationTracker = new();
-    public ScreenPosition? _lastMovePosition; // Workaround for missing touch position on touch-up.
+    private ScreenPosition? _lastTouchPosition; // Workaround for missing TouchEnd position.
 
     [Inject]
     private IJSRuntime? JsRuntime { get; set; }
-    public static bool UseGPU { get; set; } = false;
+    public static bool UseGPU { get; set; } = true;
     public string MoveCursor { get; set; } = Cursors.Move;
     public int MoveButton { get; set; } = MouseButtons.Primary;
     public int MoveModifier { get; set; } = Keys.None;
@@ -39,15 +38,31 @@ public partial class MapControl : ComponentBase, IMapControl
     public MapControl()
     {
         SharedConstructor();
-
-        _invalidate = () =>
-        {
-            if (_viewCpu != null)
-                _viewCpu?.Invalidate();
-            else
-                _viewGpu?.Invalidate();
-        };
     }
+
+    public void InvalidateCanvas()
+    {
+        if (!OperatingSystem.IsBrowser())
+            throw new InvalidOperationException("Only browser is supported");
+
+        if (_viewCpu != null)
+            _viewCpu.Invalidate();
+        else if (_viewGpu != null)
+            _viewGpu?.Invalidate();
+        else
+            throw new InvalidOperationException("Both _viewCpu and _viewGpu are null");
+    }
+
+    /// <summary>
+    /// This enables an alternative mouse wheel method where the step size on each mouse wheel event can be configured
+    /// by setting the ContinuousMouseWheelZoomStepSize.
+    /// </summary>
+    public bool UseContinuousMouseWheelZoom { get; set; } = false;
+    /// <summary>
+    /// The size of the mouse wheel steps used when UseContinuousMouseWheelZoom = true. The default is 0.1. A step 
+    /// size of 1 would doubling or halving the scale of the map on each event.    
+    /// </summary>
+    public double ContinuousMouseWheelZoomStepSize { get; set; } = 0.1;
 
     protected override void OnInitialized()
     {
@@ -55,23 +70,16 @@ public partial class MapControl : ComponentBase, IMapControl
         RefreshGraphics();
     }
 
-    protected void OnPaintSurfaceCPU(SKPaintSurfaceEventArgs e)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // the the canvas and properties
-        var canvas = e.Surface.Canvas;
-        var info = e.Info;
-
-        OnPaintSurface(canvas, info);
+        await base.OnAfterRenderAsync(firstRender);
+        if (firstRender)
+            await InitializingInteropAsync();
     }
 
-    protected void OnPaintSurfaceGPU(SKPaintGLSurfaceEventArgs e)
-    {
-        // the the canvas and properties
-        var canvas = e.Surface.Canvas;
-        var info = e.Info;
+    protected void OnPaintSurfaceCPU(SKPaintSurfaceEventArgs e) => OnPaintSurface(e.Surface.Canvas, e.Info);
 
-        OnPaintSurface(canvas, info);
-    }
+    protected void OnPaintSurfaceGPU(SKPaintGLSurfaceEventArgs e) => OnPaintSurface(e.Surface.Canvas, e.Info);
 
     protected void OnPaintSurface(SKCanvas canvas, SKImageInfo info)
     {
@@ -82,30 +90,31 @@ public partial class MapControl : ComponentBase, IMapControl
             OnLoadComplete();
         }
 
-        // Size changed Workaround
-        if (_canvasSize?.Width != info.Width || _canvasSize?.Height != info.Height)
+        // Workaround for problems with the size changed events.
+        if (_mapControlScreenSize?.Width != info.Width || _mapControlScreenSize?.Height != info.Height)
         {
-            _canvasSize = info;
-            OnSizeChanged();
+            SharedOnSizeChanged(info.Width, info.Height);
+            _ = UpdateBoundingRectAsync(); // Update bounding rect for touch
         }
-
-        CommonDrawControl(canvas);
+        _renderController?.Render(canvas);
     }
 
-    private void OnLoadComplete()
-    {
-        Catch.Exceptions(async () =>
-        {
-            SetViewportSize();
-            await InitializingInteropAsync();
-        });
-    }
+    private void OnLoadComplete() => Catch.Exceptions(InitializingInteropAsync);
 
     protected void OnMouseWheel(WheelEventArgs e)
     {
-        var mouseWheelDelta = (int)e.DeltaY * -1; // so that it zooms like on windows
-        var mousePosition = e.ToScreenPosition(_clientRect);
-        Map.Navigator.MouseWheelZoom(mouseWheelDelta, mousePosition);
+        if (UseContinuousMouseWheelZoom)
+        {
+            var stepSize = ContinuousMouseWheelZoomStepSize;
+            var scaleFactor = Math.Pow(2, e.DeltaY > 0 ? stepSize : -stepSize);
+            Map.Navigator.MouseWheelZoomContinuous(scaleFactor, e.ToScreenPosition());
+        }
+        else
+        {
+            var mouseWheelDelta = (int)e.DeltaY * -1; // so that it zooms like on windows
+            var mousePosition = e.ToScreenPosition();
+            Map.Navigator.MouseWheelZoom(mouseWheelDelta, mousePosition);
+        }
     }
 
     private async Task<BoundingClientRect> BoundingClientRectAsync()
@@ -125,15 +134,16 @@ public partial class MapControl : ComponentBase, IMapControl
             throw new ArgumentException("Interop is null");
         }
 
-        await Interop.DisableMouseWheelAsync(_elementId);
-        await Interop.DisableTouchAsync(_elementId);
-        _pixelDensityFromInterop = await Interop.GetPixelDensityAsync();
-    }
-
-    private void OnSizeChanged()
-    {
-        SetViewportSize();
-        _ = UpdateBoundingRectAsync();
+        try
+        {
+            await Interop.DisableMouseWheelAsync(_elementId);
+            await Interop.DisableTouchAsync(_elementId);
+            _pixelDensityFromInterop = (float)await Interop.GetPixelDensityAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"An exception occurred in InitializingInteropAsync: {ex}");
+        }
     }
 
     private async Task UpdateBoundingRectAsync()
@@ -153,11 +163,12 @@ public partial class MapControl : ComponentBase, IMapControl
         {
             // The client rect needs updating for scrolling. I would rather do that on the onscroll event but it does not fire on this element.
             _ = UpdateBoundingRectAsync();
-            var position = e.ToScreenPosition(_clientRect);
+
+            var position = e.ToScreenPosition();
 
             _manipulationTracker.Restart([position]);
 
-            if (OnMapPointerPressed([position]))
+            if (OnPointerPressed([position]))
                 return;
         });
     }
@@ -167,9 +178,9 @@ public partial class MapControl : ComponentBase, IMapControl
         Catch.Exceptions(() =>
         {
             var isHovering = !IsMouseButtonPressed(e);
-            var position = e.ToScreenPosition(_clientRect);
+            var position = e.ToScreenPosition();
 
-            if (OnMapPointerMoved([position], isHovering))
+            if (OnPointerMoved([position], isHovering))
                 return;
 
             if (!isHovering)
@@ -183,12 +194,12 @@ public partial class MapControl : ComponentBase, IMapControl
     {
         Catch.Exceptions(() =>
         {
-            var position = e.ToScreenPosition(_clientRect);
-            OnMapPointerReleased([position]);
+            var position = e.ToScreenPosition();
+            OnPointerReleased([position]);
         });
     }
 
-    private double GetPixelDensity()
+    public float? GetPixelDensity()
     {
         return _pixelDensityFromInterop;
     }
@@ -203,12 +214,9 @@ public partial class MapControl : ComponentBase, IMapControl
     {
         if (disposing)
         {
-            CommonDispose(true);
+            SharedDispose(true);
         }
     }
-
-    private double ViewportWidth => _canvasSize?.Width ?? 0;
-    private double ViewportHeight => _canvasSize?.Height ?? 0;
 
     public string? Cursor { get; set; }
 
@@ -230,7 +238,9 @@ public partial class MapControl : ComponentBase, IMapControl
             var positions = e.TargetTouches.ToScreenPositions(_clientRect);
             _manipulationTracker.Restart(positions);
 
-            if (OnMapPointerPressed(positions))
+            _lastTouchPosition = positions.Length > 0 ? positions[0] : null; // Workaround for missing TouchEnd position
+
+            if (OnPointerPressed(positions))
                 return;
         });
     }
@@ -240,10 +250,10 @@ public partial class MapControl : ComponentBase, IMapControl
         Catch.Exceptions(() =>
         {
             var positions = e.TargetTouches.ToScreenPositions(_clientRect);
-            if (positions.Length == 1)
-                _lastMovePosition = positions[0]; // Workaround for missing touch-up location.
+            if (positions.Length > 0)
+                _lastTouchPosition = positions[0]; // Workaround for missing TouchEnd position.
 
-            if (OnMapPointerMoved(positions))
+            if (OnPointerMoved(positions, false))
                 return;
 
 
@@ -251,14 +261,16 @@ public partial class MapControl : ComponentBase, IMapControl
         });
     }
 
-    public void OnTouchEnd(TouchEventArgs _)
+    public void OnTouchEnd(TouchEventArgs e)
     {
         Catch.Exceptions(() =>
         {
-            if (_lastMovePosition is null)
-                return;
-            var position = _lastMovePosition.Value;
-            OnMapPointerReleased([position]);
+            var positions = e.TargetTouches.ToScreenPositions(_clientRect);
+
+            if (positions.Length > 0)
+                OnPointerReleased(positions);
+            else if (_lastTouchPosition is ScreenPosition screenPosition) // Workaround for missing TouchEnd position.
+                OnPointerReleased([screenPosition]);
         });
     }
 

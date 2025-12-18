@@ -1,5 +1,8 @@
 # Frequently Asked Questions
 
+### How can I get rid of the white dots? (or black lines)
+Set `Layer.Style = null`. In Mapsui a Style can be assigned to a ILayer and a Feature. A Layer is created with a default style which is rendered as a white dot for a `Point`, a black line for a `LineString` and a black outline for a `Polygon`. The `Layer.Style` applies to all features in the layer. If you work with a style on a feature the layer style is still drawn underneath.  
+
 ### The openstreetmap layer does not show 
 The most common reason is that the default user-agent used by the osm layer is blocked.  The default user-agent gets blocked by osm at some point because there is always someone somewhere abusing the api. Within your app you need to use a user-agent that is specific to your app. We change the user agent from time to time so that the samples work but it will probably get blocked again at some point. Better not to wait until that happens and create you own user-agent right away.
 
@@ -18,12 +21,3 @@ This is because the coordinates you pass to NavigateTo are in WGS84 whereas the
 background data is in SphericalMercator. Use SphericalMercator.FromLonLat to transform 
 the NavigateTo arguments to SphericalMercator.
 Note: There can be many other forms of mixing up coordinate systems, but this is the most common.
-
-### How can I get rid of the white dots? (or black lines)
-Set `Layer.Style = null`. In Mapsui a Style can be assigned to a ILayer and a Feature. A Layer is created with a default style which is rendered as a white dot for a `Point`, a black line for a `LineString` and a black outline for a `Polygon`. The `Layer.Style` applies to all features in the layer. If you work with a style on a feature the layer style is still drawn underneath.  
-
-### Navigation does not work when assigning Map.Home
-Map.Home is meant to define the default extent. The Map.Home method is called when the canvas is initialzed. If you want to navigate after the app is started then call the methods on Map.Navigator.
-
-### Navigation does not work during startup
-To set the startup viewport you need to assign Map.Home. Map.Navigator does not work during startup because the canvas size is not known.

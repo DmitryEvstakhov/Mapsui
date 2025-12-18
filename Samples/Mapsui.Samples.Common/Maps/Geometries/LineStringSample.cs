@@ -9,8 +9,6 @@ using NetTopologySuite.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
-#pragma warning disable IDISP004 // Don't ignore created IDisposable
-
 namespace Mapsui.Samples.Common.Maps.Geometries;
 
 public class LineStringSample : ISample
@@ -38,7 +36,6 @@ public class LineStringSample : ISample
             Features = new[] { new GeometryFeature { Geometry = lineString } },
             Name = "LineStringLayer",
             Style = style
-
         };
     }
 
@@ -46,10 +43,8 @@ public class LineStringSample : ISample
     {
         return new VectorStyle
         {
-            Fill = null,
-            Outline = null,
-#pragma warning disable CS8670 // Object or collection initializer implicitly dereferences possibly null member.
-            Line = { Color = Color.YellowGreen, Width = 4 }
+            Outline = new Pen { Color = Color.Black, Width = 1 },
+            Line = new Pen { Color = Color.YellowGreen, Width = 4 }
         };
     }
 

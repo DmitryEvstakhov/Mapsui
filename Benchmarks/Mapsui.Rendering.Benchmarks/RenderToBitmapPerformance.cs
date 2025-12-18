@@ -8,12 +8,12 @@ using BenchmarkDotNet.Engines;
 using Mapsui.Extensions;
 using Mapsui.Extensions.Cache;
 using Mapsui.Layers;
-using Mapsui.Rendering.Skia.Tests;
 using Mapsui.Styles.Thematics;
 using Mapsui.Nts.Providers;
 
 #pragma warning disable IDISP001
 #pragma warning disable IDISP003
+#pragma warning disable IDISP004
 
 namespace Mapsui.Rendering.Benchmarks;
 
@@ -51,7 +51,7 @@ public class RenderToBitmapPerformance
         _map.WaitForLoadingAsync().Wait();
         _mapCached.WaitForLoadingAsync().Wait();
         // Render one time the map so that the sk path are cached.
-        using var bitmap = _mapRendererCached.RenderToBitmapStream(_mapCached.Map.Navigator.Viewport, _mapCached.Map.Layers, Color.White);
+        using var bitmap = _mapRendererCached.RenderToBitmapStream(_mapCached.Map.Navigator.Viewport, _mapCached.Map.Layers, _mapCached.Map.RenderService, Color.White);
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "VSTHRD002:Avoid problematic synchronous waits", Justification = "Needs to be synchronous")]
@@ -63,8 +63,7 @@ public class RenderToBitmapPerformance
         mapControl.Map = CreateMap(renderFormat);
 
         // fetch data first time
-        var fetchInfo = new FetchInfo(mapControl.Map.Navigator.Viewport.ToSection(), mapControl.Map.CRS);
-        mapControl.Map.RefreshData(fetchInfo);
+        mapControl.Map.RefreshData();
         mapControl.Map.Layers.WaitForLoadingAsync().Wait();
 
         return mapControl;
@@ -74,8 +73,10 @@ public class RenderToBitmapPerformance
     {
         var map = new Map();
 
-        var countrySource = new ShapeFile(GetAppDir() + $"{Path.DirectorySeparatorChar}Data{Path.DirectorySeparatorChar}countries.shp", true);
-        countrySource.CRS = "EPSG:4326";
+        var countrySource = new ShapeFile(GetAppDir() + $"{Path.DirectorySeparatorChar}Data{Path.DirectorySeparatorChar}countries.shp", true)
+        {
+            CRS = "EPSG:4326"
+        };
         var projectedCountrySource = new ProjectingProvider(countrySource)
         {
             CRS = "EPSG:3857",
@@ -94,7 +95,7 @@ public class RenderToBitmapPerformance
         {
             var sqlitePersistentCache = new SqlitePersistentCache("Performance" + renderFormat);
             sqlitePersistentCache.Clear();
-            layer = new RasterizingTileLayer(layer, _mapRenderer, persistentCache: sqlitePersistentCache, renderFormat: renderFormat.Value);
+            layer = new RasterizingTileLayer(layer, persistentCache: sqlitePersistentCache, renderFormat: renderFormat.Value);
         }
 
         map.Layers.Add(layer);
@@ -111,7 +112,7 @@ public class RenderToBitmapPerformance
         return path;
     }
 
-    private static ILayer CreateCountryLayer(IProvider countrySource)
+    private static Layer CreateCountryLayer(IProvider countrySource)
     {
         return new Layer
         {
@@ -121,7 +122,7 @@ public class RenderToBitmapPerformance
         };
     }
 
-    private static IThemeStyle CreateCountryTheme()
+    private static GradientTheme CreateCountryTheme()
     {
         // Set a gradient theme on the countries layer, based on Population density
         // First create two styles that specify min and max styles
@@ -138,7 +139,7 @@ public class RenderToBitmapPerformance
     [Benchmark]
     public void RenderDefault()
     {
-        using var bitmap = _mapRenderer.RenderToBitmapStream(_map.Map.Navigator.Viewport, _map.Map.Layers, Color.White);
+        using var bitmap = _mapRenderer.RenderToBitmapStream(_map.Map.Navigator.Viewport, _map.Map.Layers, _map.Map.RenderService, Color.White);
 #if DEBUG
         File.WriteAllBytes(@$"{OutputFolder()}\Test.png", bitmap.ToArray());
 #endif
@@ -147,7 +148,7 @@ public class RenderToBitmapPerformance
     [Benchmark]
     public void RenderDefaultCached()
     {
-        using var bitmap = _mapRendererCached.RenderToBitmapStream(_mapCached.Map.Navigator.Viewport, _mapCached.Map.Layers, Color.White);
+        using var bitmap = _mapRendererCached.RenderToBitmapStream(_mapCached.Map.Navigator.Viewport, _mapCached.Map.Layers, _mapCached.Map.RenderService, Color.White);
 #if DEBUG
         File.WriteAllBytes(@$"{OutputFolder()}\Test.png", bitmap.ToArray());
 #endif
@@ -156,7 +157,7 @@ public class RenderToBitmapPerformance
     [Benchmark]
     public void RenderRasterizingTilingPng()
     {
-        using var bitmap = _mapRendererPng.RenderToBitmapStream(_pngMap.Map.Navigator.Viewport, _pngMap.Map.Layers, Color.White);
+        using var bitmap = _mapRendererPng.RenderToBitmapStream(_pngMap.Map.Navigator.Viewport, _pngMap.Map.Layers, _pngMap.Map.RenderService, Color.White);
 #if DEBUG
         File.WriteAllBytes(@$"{OutputFolder()}\Testpng.png", bitmap.ToArray());
 #endif
@@ -165,7 +166,7 @@ public class RenderToBitmapPerformance
     [Benchmark]
     public void RenderRasterizingTilingWebP()
     {
-        using var bitmap = _mapRendererWebp.RenderToBitmapStream(_webpMap.Map.Navigator.Viewport, _webpMap.Map.Layers, Color.White);
+        using var bitmap = _mapRendererWebp.RenderToBitmapStream(_webpMap.Map.Navigator.Viewport, _webpMap.Map.Layers, _webpMap.Map.RenderService, Color.White);
 #if DEBUG
         File.WriteAllBytes(@$"{OutputFolder()}\Testwebp.png", bitmap.ToArray());
 #endif
@@ -174,7 +175,7 @@ public class RenderToBitmapPerformance
     [Benchmark]
     public void RenderRasterizingTilingSkp()
     {
-        using var bitmap = _mapRendererSkp.RenderToBitmapStream(_skpMap.Map.Navigator.Viewport, _skpMap.Map.Layers, Color.White);
+        using var bitmap = _mapRendererSkp.RenderToBitmapStream(_skpMap.Map.Navigator.Viewport, _skpMap.Map.Layers, _skpMap.Map.RenderService, Color.White);
 #if DEBUG
         File.WriteAllBytes(@$"{OutputFolder()}\Testskp.png", bitmap.ToArray());
 #endif

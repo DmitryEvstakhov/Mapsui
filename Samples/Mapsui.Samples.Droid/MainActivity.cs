@@ -3,10 +3,8 @@ using AndroidX.AppCompat.App;
 using Mapsui.Extensions;
 using Mapsui.Samples.Common;
 using Mapsui.Samples.Common.Extensions;
+using Mapsui.Samples.Common.Maps.Basic;
 using Mapsui.UI.Android;
-using Mapsui.Samples.Common.Maps.DataFormats;
-using Mapsui.Samples.Common.Maps.Demo;
-using Mapsui.Samples.Common.Maps.Widgets;
 
 namespace Mapsui.Samples.Droid;
 
@@ -15,8 +13,7 @@ public class MainActivity : AppCompatActivity
 {
     static MainActivity()
     {
-        Mapsui.Tests.Common.Samples.Register();
-        Mapsui.Samples.Common.Samples.Register();
+        Common.Samples.Register();
     }
 
     private MapControl? _mapControl;
@@ -31,13 +28,11 @@ public class MainActivity : AppCompatActivity
         SetSupportActionBar(toolbar);
 
         _mapControl = FindViewById<MapControl>(Resource.Id.mapcontrol) ?? throw new NullReferenceException();
-        _mapControl.Map = MbTilesSample.CreateMap();
         _mapControl.Map.Navigator.RotationLock = true;
-        _mapControl.Renderer.WidgetRenders[typeof(CustomWidget)] = new CustomWidgetSkiaRenderer();
 
         var relativeLayout = FindViewById<RelativeLayout>(Resource.Id.mainLayout) ?? throw new NullReferenceException(); ;
         _mapControl.Map.Layers.ClearAllGroups();
-        var sample = new OsmSample();
+        var sample = new OpenStreetMapSample();
 
         Catch.Exceptions(async () =>
         {

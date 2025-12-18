@@ -1,3 +1,5 @@
+#pragma warning disable IDE0005 // Using directive is unnecessary.
+#pragma warning disable IDISP004 // Something magically updated somewhere causing a dispose warning on creating the OSLogLoggerProvider.
 using Uno.Resizetizer;
 
 namespace Mapsui.Samples.Uno.WinUI;
@@ -10,7 +12,7 @@ public partial class App : Application
     /// </summary>
     public App()
     {
-        this.InitializeComponent();
+        InitializeComponent();
     }
 
     protected Window? MainWindow { get; private set; }
@@ -19,7 +21,7 @@ public partial class App : Application
     {
         MainWindow = new Window();
 #if DEBUG
-        MainWindow.EnableHotReload();
+        MainWindow.UseStudio();
 #endif
 
 
@@ -44,7 +46,6 @@ public partial class App : Application
             rootFrame.Navigate(typeof(MainPage), args.Arguments);
         }
 
-        MainWindow.SetWindowIcon();
         // Ensure the current window is active
         MainWindow.Activate();
     }

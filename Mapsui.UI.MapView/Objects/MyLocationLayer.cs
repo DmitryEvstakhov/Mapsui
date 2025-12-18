@@ -9,6 +9,7 @@ using Mapsui.Nts.Extensions;
 using Mapsui.Utilities;
 using Animation = Mapsui.Animations.Animation;
 using Mapsui.UI.Maui;
+using Color = Mapsui.Styles.Color;
 
 #pragma warning disable IDISP004 // Don't ignore created IDisposable
 
@@ -25,8 +26,8 @@ public class MyLocationLayer : BaseLayer
 {
     private MapView _mapView;
     private readonly GeometryFeature _feature;
-    private readonly SymbolStyle _locStyle;  // style for the location indicator
-    private readonly SymbolStyle _dirStyle;  // style for the view-direction indicator
+    private readonly ImageStyle _locStyle;  // style for the location indicator
+    private readonly ImageStyle _dirStyle;  // style for the view-direction indicator
     private readonly CalloutStyle _coStyle;  // style for the callout
 
     private static readonly string _movingImageSource = "embedded://Mapsui.Resources.Images.MyLocationMoving.svg";
@@ -49,7 +50,7 @@ public class MyLocationLayer : BaseLayer
             if (_isMoving != value)
             {
                 _isMoving = value;
-                _locStyle.ImageSource = _isMoving ? _movingImageSource : _stillImageSource;
+                _locStyle.Image = _isMoving ? _movingImageSource : _stillImageSource;
             }
         }
     }
@@ -151,7 +152,6 @@ public class MyLocationLayer : BaseLayer
     {
         _mapView = default!; // will be set in constructor with MapView
         Enabled = false;
-        IsMapInfoLayer = true;
 
         _feature = new GeometryFeature
         {
@@ -159,23 +159,23 @@ public class MyLocationLayer : BaseLayer
             ["Label"] = "MyLocation moving",
         };
 
-        _locStyle = new SymbolStyle
+        _locStyle = new ImageStyle
         {
             Enabled = true,
-            ImageSource = _stillImageSource,
+            Image = _stillImageSource,
             SymbolScale = Scale,
             SymbolRotation = Direction,
-            SymbolOffset = new Offset(0, 0),
+            Offset = new Offset(0, 0),
             Opacity = 1,
         };
 
-        _dirStyle = new SymbolStyle
+        _dirStyle = new ImageStyle
         {
             Enabled = false,
-            ImageSource = _directionImageSource,
+            Image = _directionImageSource,
             SymbolScale = 0.2,
             SymbolRotation = 0,
-            SymbolOffset = new Offset(0, 0),
+            Offset = new Offset(0, 0),
             Opacity = 1,
         };
         _coStyle = new CalloutStyle
@@ -184,7 +184,7 @@ public class MyLocationLayer : BaseLayer
             Type = CalloutType.Single,
             Title = "",
             TitleFontColor = Color.Black,
-            SymbolOffset = new Offset(0, -SymbolStyle.DefaultHeight * 0.4f),
+            Offset = new Offset(0, -SymbolStyle.DefaultHeight * 0.4f),
             MaxWidth = 300,
             RotateWithMap = true,
             SymbolOffsetRotatesWithMap = true,
@@ -235,8 +235,6 @@ public class MyLocationLayer : BaseLayer
 
                 if (_mapView.Map.Navigator.Viewport.ToExtent() is not null)
                 {
-                    var fetchInfo = new FetchInfo(_mapView.Map.Navigator.Viewport.ToSection(), _mapView.Map?.CRS,
-                        ChangeType.Discrete);
                     _animationMyLocation = new AnimationEntry<MapView>(
                         _animationMyLocationStart,
                         _animationMyLocationEnd,
@@ -257,7 +255,7 @@ public class MyLocationLayer : BaseLayer
                         },
                         final: (mapView, entry) =>
                         {
-                            mapView.Map.RefreshData(fetchInfo);
+                            mapView.Map.RefreshData();
                             if (MyLocation != _animationMyLocationEnd)
                             {
                                 InternalUpdateMyLocation(_animationMyLocationEnd);

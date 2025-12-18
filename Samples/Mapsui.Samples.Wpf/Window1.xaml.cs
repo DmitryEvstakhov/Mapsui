@@ -1,12 +1,12 @@
-﻿using System.Linq;
+﻿using Mapsui.Extensions;
+using Mapsui.Samples.Common;
+using Mapsui.Samples.Common.Extensions;
+using Mapsui.UI.Wpf;
+using System.Linq;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using Mapsui.Extensions;
-using Mapsui.Samples.Common;
-using Mapsui.Samples.Common.Extensions;
-using Mapsui.Samples.Common.Maps.Widgets;
 
 namespace Mapsui.Samples.Wpf;
 
@@ -16,8 +16,7 @@ public partial class Window1
 {
     static Window1()
     {
-        Mapsui.Tests.Common.Samples.Register();
-        Mapsui.Samples.Common.Samples.Register();
+        Common.Samples.Register();
     }
 
     public Window1()
@@ -25,13 +24,14 @@ public partial class Window1
         InitializeComponent();
 
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
+        // Uncomment the line below to use the Experimental Skia renderer
+        // MapControl.SetMapRenderer(new Experimental.Rendering.Skia.MapRenderer());
         MapControl.Map.Navigator.RotationLock = false;
-        MapControl.Renderer.WidgetRenders[typeof(CustomWidget)] = new CustomWidgetSkiaRenderer();
 
         CategoryComboBox.SelectionChanged += CategoryComboBoxSelectionChanged;
 
         FillComboBoxWithCategories();
-        FillListWithSamples();
     }
 
     private void FillListWithSamples()
@@ -53,8 +53,7 @@ public partial class Window1
 
     private void FillComboBoxWithCategories()
     {
-        Mapsui.Tests.Common.Samples.Register();
-        Mapsui.Samples.Common.Samples.Register();
+        Common.Samples.Register();
 
         var categories = AllSamples.GetSamples().Select(s => s.Category).Distinct().OrderBy(c => c);
         foreach (var category in categories)
@@ -74,7 +73,7 @@ public partial class Window1
             Margin = new Thickness(4)
         };
 
-        radioButton.Click += (s, a) =>
+        radioButton.Click += (s, e) =>
         {
             Catch.Exceptions(async () =>
             {

@@ -9,17 +9,18 @@ namespace Mapsui.UI.WindowsForms;
 
 public partial class MapControl : UserControl, IMapControl, IDisposable
 {
-    public static bool UseGPU = true;
+    public static bool UseGPU { get; set; } = false;
 
     private readonly SKGLControl? _glView;
     private readonly SKControl? _canvasView;
     private readonly ManipulationTracker _manipulationTracker = new();
     private bool _disposed;
 
+#if NET9_OR_GREATER
+    [Register("MapControl"), DesignTimeVisible(true)]
+#endif
     public MapControl()
     {
-        SharedConstructor();
-
         Control view;
 
         Dock = DockStyle.Fill;
@@ -32,13 +33,6 @@ public partial class MapControl : UserControl, IMapControl, IDisposable
             // Use GPU backend
             _glView = new SKGLControl();
             // Events
-            _invalidate = () =>
-            {
-                if (!_glView.IsHandleCreated)
-                    return;
-
-                Invoke(() => _glView.Invalidate());
-            };
             _glView.PaintSurface += OnGLPaintSurface;
             view = _glView;
         }
@@ -47,13 +41,6 @@ public partial class MapControl : UserControl, IMapControl, IDisposable
             // Use CPU backend
             _canvasView = new SKControl();
             // Events
-            _invalidate = () =>
-            {
-                if (!_canvasView.IsHandleCreated)
-                    return;
-
-                Invoke(() => _canvasView.Invalidate());
-            };
             _canvasView.PaintSurface += OnPaintSurface;
             view = _canvasView;
         }
@@ -67,15 +54,32 @@ public partial class MapControl : UserControl, IMapControl, IDisposable
         view.Dock = DockStyle.Fill;
 
         Controls.Add(view);
+
+        SharedConstructor();
+    }
+
+    public void InvalidateCanvas()
+    {
+        if (_glView is SKGLControl glView)
+        {
+            if (!_glView.IsHandleCreated)
+                return;
+            Invoke(glView.Invalidate);
+        }
+        else if (_canvasView is SKControl canvasView)
+        {
+            if (!canvasView.IsHandleCreated)
+                return;
+            Invoke(_canvasView.Invalidate);
+        }
+        else
+            throw new InvalidOperationException("Neither the SKGLControl nor the SKControl is initialized.");
     }
 
     private void MapControlResize(object? sender, EventArgs e)
     {
-        SetViewportSize();
+        SharedOnSizeChanged(Width, Height);
     }
-
-    private double ViewportWidth => Width;
-    private double ViewportHeight => Height;
 
     private void OnGLPaintSurface(object? sender, SKPaintGLSurfaceEventArgs args)
     {
@@ -98,20 +102,20 @@ public partial class MapControl : UserControl, IMapControl, IDisposable
 
     private void PaintSurface(SKCanvas canvas)
     {
-        if (PixelDensity <= 0)
+        if (GetPixelDensity() is not float pixelDensity)
             return;
 
-        canvas.Scale(PixelDensity, PixelDensity);
+        canvas.Scale(pixelDensity, pixelDensity);
 
-        CommonDrawControl(canvas);
+        _renderController?.Render(canvas);
     }
 
     private void MapControlMouseDown(object? sender, MouseEventArgs e)
     {
-        var position = GetScreenPosition(e.Location);
-        _manipulationTracker.Restart([position]);
+        var screenPosition = GetScreenPosition(e.Location);
+        _manipulationTracker.Restart([screenPosition]);
 
-        OnMapPointerPressed([position]);
+        OnPointerPressed([screenPosition]);
     }
 
     private void MapControlMouseMove(object? sender, MouseEventArgs e)
@@ -119,7 +123,7 @@ public partial class MapControl : UserControl, IMapControl, IDisposable
         var isHovering = IsHovering(e);
         var position = GetScreenPosition(e.Location);
 
-        if (OnMapPointerMoved([position], isHovering))
+        if (OnPointerMoved([position], isHovering))
             return;
 
         if (!isHovering)
@@ -128,8 +132,8 @@ public partial class MapControl : UserControl, IMapControl, IDisposable
 
     private void MapControlMouseUp(object? sender, MouseEventArgs e)
     {
-        var position = GetScreenPosition(e.Location);
-        OnMapPointerReleased([position]);
+        var screenPosition = GetScreenPosition(e.Location);
+        OnPointerReleased([screenPosition]);
     }
 
     private void MapControlMouseWheel(object? sender, MouseEventArgs e)
@@ -167,9 +171,11 @@ public partial class MapControl : UserControl, IMapControl, IDisposable
         return new ScreenPosition(position.X, position.Y);
     }
 
-    public double GetPixelDensity()
+    public float? GetPixelDensity()
     {
-        return (UseGPU ? _glView!.CanvasSize.Width : _canvasView!.CanvasSize.Width) / Width;
+        if (Width <= 0)
+            return null;
+        return (float)(UseGPU ? _glView!.CanvasSize.Width : _canvasView!.CanvasSize.Width) / Width;
     }
 
     protected override void Dispose(bool disposing)
@@ -182,7 +188,7 @@ public partial class MapControl : UserControl, IMapControl, IDisposable
         _disposed = true;
         if (disposing)
         {
-            CommonDispose(disposing);
+            SharedDispose(disposing);
 
             _glView?.Dispose();
             _canvasView?.Dispose();

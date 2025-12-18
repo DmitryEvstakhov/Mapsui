@@ -7,8 +7,9 @@
 using Mapsui.Extensions;
 using Mapsui.Fetcher;
 using Mapsui.Layers;
-using Mapsui.Logging;
+using Mapsui.Rendering;
 using Mapsui.Styles;
+using Mapsui.Utilities;
 using Mapsui.Widgets;
 using Mapsui.Widgets.InfoWidgets;
 using System;
@@ -30,6 +31,7 @@ public class Map : INotifyPropertyChanged, IDisposable
     private LayerCollection _layers = [];
     private Color _backColor = Color.White;
     private IWidget[] _oldWidgets = [];
+    private readonly DataFetcher _dataFetcher;
 
     /// <summary>
     /// Initializes a new map
@@ -38,10 +40,33 @@ public class Map : INotifyPropertyChanged, IDisposable
     {
         BackColor = Color.White;
         Layers = [];
-        Widgets.Add(CreateLoggingWidget());
-        Navigator.RefreshDataRequest += Navigator_RefreshDataRequest;
+        _dataFetcher = new DataFetcher(GetFetchableSources);
+        Widgets.Add(CreateLoggingWidget(RefreshGraphics));
+        Widgets.Add(CreatePerformanceWidget(this));
+        Navigator.FetchRequested += Navigator_FetchRequested;
         Navigator.ViewportChanged += Navigator_ViewportChanged;
+        RenderService.ImageSourceCache.FetchRequested += FetchableSource_FetchRequested;
     }
+
+    public FetchMachine FetchMachine { get; } = new(16); // This is still needed because we support the IAsyncDataFetcher interface.
+    public RenderService RenderService { get; set; } = new();
+
+    /// <summary>
+    /// Event that is triggered when the map is tapped. Can be a single tap, double tap or long press.
+    /// </summary>
+    public event EventHandler<MapEventArgs>? Tapped;
+    /// <summary>
+    /// Event that is triggered when on pointer down.
+    /// </summary>
+    public event EventHandler<MapEventArgs>? PointerPressed;
+    /// <summary>
+    /// Event that is triggered when on pointer move. Can be a drag or hover.
+    /// </summary>
+    public event EventHandler<MapEventArgs>? PointerMoved;
+    /// <summary>
+    /// Event that is triggered when on pointer up.
+    /// </summary>
+    public event EventHandler<MapEventArgs>? PointerReleased;
 
     private void Navigator_ViewportChanged(object? sender, ViewportChangedEventArgs e)
     {
@@ -93,7 +118,7 @@ public class Map : INotifyPropertyChanged, IDisposable
                 }
             }
 
-            _oldWidgets = [.. Widgets];
+            _oldWidgets = Widgets.ToArray();
 
             foreach (var widget in Widgets)
             {
@@ -144,6 +169,13 @@ public class Map : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
+    /// Handles all manipulations of the map viewport
+    /// </summary>
+    public Navigator Navigator { get; private set; } = new Navigator();
+
+    public Performance Performance { get; } = new Performance();
+
+    /// <summary>
     /// Called whenever a property changed
     /// </summary>
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -159,16 +191,14 @@ public class Map : INotifyPropertyChanged, IDisposable
     /// Called whenever the map is clicked. The MapInfoEventArgs contain the features that were hit in
     /// the layers that have IsMapInfoLayer set to true. 
     /// </summary>
+    /// <remarks>
+    /// The Tapped event is preferred over the Info event. This event is kept for backwards compatibility.
+    /// </remarks>
     public event EventHandler<MapInfoEventArgs>? Info;
 
-    /// <summary>
-    /// Handles all manipulations of the map viewport
-    /// </summary>
-    public Navigator Navigator { get; private set; } = new Navigator();
-
-    private void Navigator_RefreshDataRequest(object? sender, EventArgs e)
+    private void Navigator_FetchRequested(object? sender, FetchRequestedEventArgs e)
     {
-        RefreshData(ChangeType.Discrete);
+        RefreshData(e.ChangeType);
     }
 
     /// <summary>
@@ -180,18 +210,38 @@ public class Map : INotifyPropertyChanged, IDisposable
         RefreshGraphics();
     }
 
+    public void RefreshData(Viewport viewport)
+    {
+        RefreshData(ChangeType.Discrete, viewport);
+    }
+
     /// <summary>
     /// Refresh data of Map, but don't paint it
     /// </summary>
-    public void RefreshData(ChangeType changeType = ChangeType.Discrete, bool forceUpdate = false)
+    public void RefreshData(ChangeType changeType = ChangeType.Discrete, Viewport? viewport = null)
     {
-        if (Navigator.Viewport.ToExtent() is null)
-            return;
-        if (Navigator.Viewport.ToExtent().GetArea() <= 0)
+        var fetchInfo = ToFetchInfo(viewport ?? Navigator.Viewport, changeType, CRS);
+        if (fetchInfo == null)
             return;
 
-        var fetchInfo = new FetchInfo(Navigator.Viewport.ToSection(), CRS, changeType, forceUpdate);
-        RefreshData(fetchInfo);
+        foreach (var layer in _layers.ToList())
+        {
+            if (layer is IAsyncDataFetcher asyncDataFetcher)
+                asyncDataFetcher.RefreshData(fetchInfo, FetchMachine.Enqueue);
+        }
+
+        if (changeType == ChangeType.Discrete)
+            _dataFetcher.ViewportChanged(fetchInfo);
+    }
+
+    private static FetchInfo? ToFetchInfo(Viewport viewport, ChangeType changeType, string? CRS)
+    {
+        if (viewport.ToExtent() is null)
+            return null;
+        if (viewport.ToExtent().GetArea() <= 0)
+            return null;
+
+        return new FetchInfo(viewport.ToSection(), CRS, changeType);
     }
 
     public void RefreshGraphics()
@@ -229,17 +279,35 @@ public class Map : INotifyPropertyChanged, IDisposable
     {
         foreach (var layer in _layers)
         {
-            if (layer is IAsyncDataFetcher asyncLayer) asyncLayer.ClearCache();
+            if (layer is IAsyncDataFetcher asyncLayer)
+                asyncLayer.ClearCache();
+            if (layer is IFetchableSource fetchableSource)
+                fetchableSource.ClearCache();
         }
     }
 
-    public void RefreshData(FetchInfo fetchInfo)
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public virtual void OnTapped(MapEventArgs e)
     {
-        foreach (var layer in _layers.ToList())
-        {
-            if (layer is IAsyncDataFetcher asyncDataFetcher)
-                asyncDataFetcher.RefreshData(fetchInfo);
-        }
+        Tapped?.Invoke(this, e);
+    }
+
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public virtual void OnPointerPressed(MapEventArgs e)
+    {
+        PointerPressed?.Invoke(this, e);
+    }
+
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public virtual void OnPointerMoved(MapEventArgs e)
+    {
+        PointerMoved?.Invoke(this, e);
+    }
+
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public virtual void OnPointerReleased(MapEventArgs e)
+    {
+        PointerReleased?.Invoke(this, e);
     }
 
     private void LayersCollectionChanged(object sender, LayerCollectionChangedEventArgs args)
@@ -257,12 +325,21 @@ public class Map : INotifyPropertyChanged, IDisposable
     {
         layer.DataChanged += LayerDataChanged;
         layer.PropertyChanged += LayerPropertyChanged;
+        if (layer is IFetchableSource fetchableSource)
+            fetchableSource.FetchRequested += FetchableSource_FetchRequested;
+    }
+
+    private void FetchableSource_FetchRequested(object? sender, FetchRequestedEventArgs e)
+    {
+        RefreshData(e.ChangeType);
     }
 
     private void LayerRemoved(ILayer layer)
     {
         if (layer is IAsyncDataFetcher asyncLayer)
             asyncLayer.AbortFetch();
+        if (layer is IFetchableSource fetchableSource)
+            fetchableSource.FetchRequested -= FetchableSource_FetchRequested;
 
         layer.DataChanged -= LayerDataChanged;
         layer.PropertyChanged -= LayerPropertyChanged;
@@ -279,13 +356,13 @@ public class Map : INotifyPropertyChanged, IDisposable
     private static MMinMax? GetMinMaxResolution(IEnumerable<double>? resolutions)
     {
         if (resolutions == null || !resolutions.Any()) return null;
-        resolutions = [.. resolutions.OrderByDescending(r => r)];
+        resolutions = resolutions.OrderByDescending(r => r).ToArray();
         var mostZoomedOut = resolutions.First();
         var mostZoomedIn = resolutions.Last() * 0.5; // Divide by two to allow one extra level to zoom-in
         return new MMinMax(mostZoomedOut, mostZoomedIn);
     }
 
-    private static IReadOnlyList<double> DetermineResolutions(IEnumerable<ILayer> layers)
+    private static double[] DetermineResolutions(IEnumerable<ILayer> layers)
     {
         var items = new Dictionary<double, double>();
         const float normalizedDistanceThreshold = 0.75f;
@@ -316,7 +393,7 @@ public class Map : INotifyPropertyChanged, IDisposable
             }
         }
 
-        return [.. items.Select(i => i.Value).OrderByDescending(i => i)];
+        return items.Select(i => i.Value).OrderByDescending(i => i).ToArray();
     }
 
     private void LayerPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -347,7 +424,7 @@ public class Map : INotifyPropertyChanged, IDisposable
     public IEnumerable<IWidget> GetWidgetsOfMapAndLayers()
     {
         return Widgets.Concat(Layers.Where(l => l.Enabled).Select(l => l.Attribution))
-            .Where(a => a != null && a.Enabled).ToList();
+            .Where(a => a != null && a.Enabled).ToArray();
     }
 
     /// <summary>
@@ -372,6 +449,11 @@ public class Map : INotifyPropertyChanged, IDisposable
             foreach (var layer in Layers)
                 LayerRemoved(layer); // Remove Event so that no memory leaks occur
             Layers.ClearAllGroups();
+            RenderService.Dispose();
+
+            Navigator.ViewportChanged -= Navigator_ViewportChanged;
+            Navigator.FetchRequested -= Navigator_FetchRequested;
+            RenderService.ImageSourceCache.FetchRequested -= FetchableSource_FetchRequested;
         }
     }
 
@@ -388,13 +470,33 @@ public class Map : INotifyPropertyChanged, IDisposable
         return areAnimationsRunning;
     }
 
-    private static LoggingWidget CreateLoggingWidget() => new()
+    private static LoggingWidget CreateLoggingWidget(Action refreshGraphics) => new(refreshGraphics)
     {
         Margin = new MRect(10),
         VerticalAlignment = VerticalAlignment.Stretch,
         HorizontalAlignment = HorizontalAlignment.Stretch,
         BackColor = Color.Transparent,
         Opacity = 0.0f,
-        LogLevelFilter = LogLevel.Trace,
     };
+
+    private static PerformanceWidget CreatePerformanceWidget(Map map) => new(map.Performance)
+    {
+        HorizontalAlignment = HorizontalAlignment.Right,
+        VerticalAlignment = VerticalAlignment.Bottom,
+        Margin = new MRect(10, 60),
+        TextSize = 12,
+        TextColor = Color.Black,
+        BackColor = Color.White,
+        WithTappedEvent = (s, e) =>
+        {
+            map.Performance.Clear();
+            map.RefreshGraphics();
+            e.Handled = true;
+        }
+    };
+
+    private IEnumerable<IFetchableSource> GetFetchableSources()
+    {
+        return _layers.OfType<IFetchableSource>().Concat(new[] { RenderService.ImageSourceCache });
+    }
 }

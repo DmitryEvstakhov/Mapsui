@@ -10,13 +10,11 @@ using System.Threading.Tasks;
 using Mapsui.Providers;
 using Mapsui.Providers.Wfs.Utilities;
 
-#pragma warning disable IDISP001 // Dispose created
-
 namespace Mapsui.Samples.Common.Maps.WFS;
 
 public class WfsOgcFilterSample : ISample
 {
-    public string Name => "WFS Ogc Filter";
+    public string Name => "WfsOgcFilter";
     public string Category => "WFS";
 
     private const string wfsUri = "https://sgx.geodatenzentrum.de/wfs_vg2500";
@@ -35,7 +33,7 @@ public class WfsOgcFilterSample : ISample
             map.Layers.Add(CreateWfsLayer(provider));
             map.Layers.Add(CreateLabelLayer(provider));
 
-            map.Widgets.Add(new MapInfoWidget(map));
+            map.Widgets.Add(new MapInfoWidget(map, l => l.Name == layerName));
 
             map.Navigator.CenterOnAndZoomTo(new MPoint(964406.63616331492, 6055489.2309588827), map.Navigator.Resolutions[10]);
 
@@ -53,9 +51,12 @@ public class WfsOgcFilterSample : ISample
     {
         return new Layer(layerName)
         {
-            Style = new VectorStyle { Fill = new Brush { Color = Color.FromArgb(192, 255, 0, 0) } },
+            Style = new VectorStyle
+            {
+                Fill = new Brush { Color = Color.FromArgb(192, 255, 0, 0) },
+                Outline = new Pen(Color.Gray, 1f),
+            },
             DataSource = provider,
-            IsMapInfoLayer = true
         };
     }
 

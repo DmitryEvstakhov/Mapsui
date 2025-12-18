@@ -9,20 +9,18 @@ using Mapsui.Widgets.InfoWidgets;
 using NetTopologySuite.Geometries;
 using System.Collections.Generic;
 
-// ReSharper disable UnusedAutoPropertyAccessor.Local
-#pragma warning disable CS8670 // Object or collection initializer implicitly dereferences possibly null member.
-#pragma warning disable IDISP001 // Dispose created
-
 namespace Mapsui.Samples.Common.Maps.Performance;
 
 public class RasterizingTileLayerWithLineStringSample : IMapControlSample
 {
-    public string Name => "RasterizingTileLayer with LineString";
+    public string Name => "RasterizingTileLayerWithLineString";
     public string Category => "Performance";
 
     public void Setup(IMapControl mapControl)
     {
-        mapControl.Map = CreateMap(mapControl.PixelDensity);
+        // PixelDensity is not always known at startup. The RasterizingTileLayer should be initialized later.
+        var pixelDensity = mapControl.GetPixelDensity() ?? 1;
+        mapControl.Map = CreateMap(pixelDensity);
     }
 
     public static Map CreateMap(float pixelDensity)
@@ -35,7 +33,7 @@ public class RasterizingTileLayerWithLineStringSample : IMapControlSample
         var extent = lineStringLayer.Extent!.Grow(lineStringLayer.Extent!.Width * 0.25);
         map.Navigator.ZoomToBox(extent);
 
-        map.Widgets.Add(new MapInfoWidget(map));
+        map.Widgets.Add(new MapInfoWidget(map, l => l.Name == "LineString"));
 
         return map;
     }
@@ -45,7 +43,6 @@ public class RasterizingTileLayerWithLineStringSample : IMapControlSample
         return new MemoryLayer
         {
             Name = "LineString",
-            IsMapInfoLayer = true,
             Features = new List<IFeature>() { GetFeature() }
         };
     }
@@ -80,14 +77,16 @@ public class RasterizingTileLayerWithLineStringSample : IMapControlSample
         var vsout = new VectorStyle
         {
             Opacity = 0.5f,
+            Outline = new Pen(Color.Gray, 1f),
             Line = new Pen(Color.White, 10f),
+            Fill = new Brush(Color.White)
         };
 
         var vs = new VectorStyle
         {
-            Fill = null,
             Outline = null,
-            Line = { Color = Color.Red, Width = 5f }
+            Line = new Pen(Color.Red, 5f),
+            Fill = new Brush(Color.White)
         };
 
         feature.Styles.Add(vsout);

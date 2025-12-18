@@ -1,14 +1,10 @@
-﻿using Mapsui.Extensions;
-using Mapsui.Manipulations;
+﻿using Mapsui.Manipulations;
 using Mapsui.Samples.Common;
-using Mapsui.Samples.Common.Maps.Demo;
+using Mapsui.Samples.Common.Maps.Basic;
 using Mapsui.Styles;
 using Mapsui.UI;
 using Mapsui.UI.Maui;
 using Mapsui.Utilities;
-using Mapsui.Widgets.InfoWidgets;
-using Microsoft.Maui.Graphics;
-using System;
 using System.Diagnostics;
 using System.Reflection;
 using Color = Microsoft.Maui.Graphics.Color;
@@ -27,21 +23,17 @@ public class ManyPinsSample : IMapViewSample
 
     public bool UpdateLocation => true;
 
-    public bool OnTap(object? sender, EventArgs args)
+    public bool OnTap(object? s, MapClickedEventArgs e)
     {
-        var mapView = sender as UI.Maui.MapView;
-        var e = args as MapClickedEventArgs;
-
-        if (mapView == null)
-            return false;
+        var mapView = Caster.TryCastOrThrow<UI.Maui.MapView>(s);
 
         var assembly = typeof(AllSamples).GetTypeInfo().Assembly;
         foreach (var str in assembly.GetManifestResourceNames())
-            System.Diagnostics.Debug.WriteLine(str);
+            Debug.WriteLine(str);
 
-        switch (e?.TapType)
+        switch (e?.GestureType)
         {
-            case TapType.Single:
+            case GestureType.SingleTap:
                 var pin = new Pin(mapView)
                 {
                     Label = $"PinType.Pin {markerNum++}",
@@ -76,7 +68,7 @@ public class ManyPinsSample : IMapViewSample
                 mapView.Pins.Add(pin);
                 pin.ShowCallout();
                 break;
-            case TapType.Double:
+            case GestureType.DoubleTap:
                 foreach (var r in assembly.GetManifestResourceNames())
                     System.Diagnostics.Debug.WriteLine(r);
 
@@ -91,7 +83,7 @@ public class ManyPinsSample : IMapViewSample
                 });
                 break;
             default:
-                throw new Exception("Unknown TapType. This is bug in Mapsui.");
+                throw new Exception($"Unknown {nameof(GestureType)}. This is bug in Mapsui.");
         }
 
         return true;
@@ -99,13 +91,7 @@ public class ManyPinsSample : IMapViewSample
 
     public void Setup(IMapControl mapControl)
     {
-        mapControl.Map = OsmSample.CreateMap();
-
-        if (mapControl.Performance == null)
-            mapControl.Performance = new Performance();
-
-        mapControl.Map.Widgets.Add(CreatePerformanceWidget(mapControl));
-        mapControl.Renderer.WidgetRenders[typeof(PerformanceWidget)] = new Rendering.Skia.SkiaWidgets.PerformanceWidgetRenderer();
+        mapControl.Map = OpenStreetMapSample.CreateMap();
 
         ((UI.Maui.MapView)mapControl).UniqueCallout = true;
 
@@ -113,7 +99,7 @@ public class ManyPinsSample : IMapViewSample
         sw.Start();
 
         // Add 1000 pins
-        var list = new System.Collections.Generic.List<Pin>();
+        var list = new List<Pin>();
         for (var i = 0; i < 1000; i++)
         {
             list.Add(CreatePin(i));
@@ -126,20 +112,6 @@ public class ManyPinsSample : IMapViewSample
         _ = sw.Elapsed;
 
         sw.Stop();
-    }
-
-    private static PerformanceWidget CreatePerformanceWidget(IMapControl mapControl)
-    {
-        ArgumentNullException.ThrowIfNull(mapControl.Performance);
-        return new PerformanceWidget(mapControl.Performance)
-        {
-            Tapped = (sender, args) =>
-            {
-                mapControl?.Performance.Clear();
-                mapControl?.RefreshGraphics();
-                return true;
-            }
-        };
     }
 
     private Pin CreatePin(int num)

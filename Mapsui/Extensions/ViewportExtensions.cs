@@ -24,9 +24,10 @@ public static class ViewportExtensions
     {
         if (!viewport.IsRotated()) // Checking on IsRotated for performance reasons
         {
-            var min = viewport.WorldToScreen(rect.Min);
-            var max = viewport.WorldToScreen(rect.Max);
-            return new MRect(min.X, min.Y, max.X, max.Y);
+            var (minScreenX, minScreenY) = viewport.WorldToScreenXY(rect.Min.X, rect.Min.Y);
+            var (maxScreenX, maxScreenY) = viewport.WorldToScreenXY(rect.Max.X, rect.Max.Y);
+            // WorldToScreen inverts the Y so minY and maxY are swapped.
+            return new MRect(minScreenX, maxScreenY, maxScreenX, minScreenY);
         }
 
         // In case of the rotated viewport all four coordinates
@@ -36,18 +37,18 @@ public static class ViewportExtensions
         // rotated.
         var screenPoints = new List<ScreenPosition>
         {
-            viewport.WorldToScreen(rect.BottomLeft),
-            viewport.WorldToScreen(rect.BottomRight),
-            viewport.WorldToScreen(rect.TopRight),
-            viewport.WorldToScreen(rect.TopLeft)
+            viewport.WorldToScreen(rect.GetBottomLeft()),
+            viewport.WorldToScreen(rect.GetBottomRight()),
+            viewport.WorldToScreen(rect.GetTopRight()),
+            viewport.WorldToScreen(rect.GetTopLeft())
         };
 
-        var minx = screenPoints.Select(p => p.X).Min();
-        var miny = screenPoints.Select(p => p.Y).Min();
-        var maxx = screenPoints.Select(p => p.X).Max();
-        var maxy = screenPoints.Select(p => p.Y).Max();
+        var minX = screenPoints.Select(p => p.X).Min();
+        var minY = screenPoints.Select(p => p.Y).Min();
+        var maxX = screenPoints.Select(p => p.X).Max();
+        var maxY = screenPoints.Select(p => p.Y).Max();
 
-        return new MRect(minx, miny, maxx, maxy);
+        return new MRect(minX, minY, maxX, maxY);
     }
 
     /// <summary>

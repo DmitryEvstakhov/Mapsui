@@ -3,15 +3,9 @@ using Mapsui.Styles;
 using Mapsui.Widgets.BoxWidgets;
 using System;
 using System.Collections.Concurrent;
+using System.Text;
 
 namespace Mapsui.Widgets.InfoWidgets;
-
-public enum ShowLoggingInMap
-{
-    WhenLoggingWidgetIsEnabled,
-    WhenLoggingWidgetIsEnabledAndDebuggerIsAttached,
-    Never,
-}
 
 /// <summary>
 /// Widget which shows log entries
@@ -25,11 +19,10 @@ public class LoggingWidget : TextBoxWidget
     public struct LogEntry
     {
         public LogLevel LogLevel;
-        public string Description;
-        public Exception? Exception;
+        public string FormattedLogLine;
     }
 
-    public LoggingWidget()
+    public LoggingWidget(Action refreshGraphics)
     {
         _listOfLogEntries = new ConcurrentQueue<LogEntry>();
 
@@ -39,33 +32,55 @@ public class LoggingWidget : TextBoxWidget
         Width = 250;
         Height = 142;
         InputTransparent = true;
+        _weakReferenceToRefreshGraphics = new WeakReference<Action>(refreshGraphics);
     }
 
     /// <summary>
     /// Global setting to control logging in the map. Note, that there will never be logging in the map if the 
     /// Enabled field of the logging widget is false.
     /// </summary>
-    public static ShowLoggingInMap ShowLoggingInMap { get; set; }
-        = ShowLoggingInMap.WhenLoggingWidgetIsEnabledAndDebuggerIsAttached;
+    public static ActiveMode ShowLoggingInMap { get; set; } = ActiveMode.OnlyInDebugMode;
 
     /// <summary>
     ///  Event handler for logging
     /// </summary>
     public void Log(LogLevel level, string description, Exception? exception)
     {
-        if (!ShouldLog(Enabled, ShowLoggingInMap))
+        if (!GetIsActive(Enabled, ShowLoggingInMap))
             return;
 
-        var entry = new LogEntry { LogLevel = level, Description = description, Exception = exception };
+        if (LogLevelFilter < level)
+            return;
+
+        var entry = new LogEntry { LogLevel = level, FormattedLogLine = ToFormattedLogLine(level, description, exception) };
 
         _listOfLogEntries.Enqueue(entry);
 
-        while (_listOfLogEntries.Count > _maxNumberOfLogEntriesToKeep)
+        while (_listOfLogEntries.Count > MaxNumberOfLogEntriesToKeep)
         {
             _listOfLogEntries.TryDequeue(out var _);
         }
 
-        Invalidate(nameof(Text));
+        RefreshGraphics(_weakReferenceToRefreshGraphics);
+    }
+
+    private string ToFormattedLogLine(LogLevel level, string description, Exception? exception)
+    {
+        var builder = new StringBuilder();
+
+        builder.Append(ToString(level));
+        builder.Append(": ");
+        if (string.IsNullOrEmpty(description))
+            builder.Append("NO MESSAGE");
+        else
+            builder.Append(description);
+        if (exception != null)
+        {
+            builder.Append($" - EXCEPTION: {exception.GetType()}");
+            if (!string.IsNullOrEmpty(exception.Message))
+                builder.Append($" - EXCEPTION MESSAGE: {exception.Message}");
+        }
+        return builder.ToString();
     }
 
     public void Clear()
@@ -75,102 +90,59 @@ public class LoggingWidget : TextBoxWidget
             _listOfLogEntries.TryDequeue(out var _);
         }
 
-        Invalidate(nameof(Text));
+        RefreshGraphics(_weakReferenceToRefreshGraphics);
+    }
+
+    private static void RefreshGraphics(WeakReference<Action> refreshGraphics)
+    {
+        if (refreshGraphics.TryGetTarget(out var target))
+            target?.Invoke();
     }
 
     private readonly ConcurrentQueue<LogEntry> _listOfLogEntries;
+    private readonly WeakReference<Action> _weakReferenceToRefreshGraphics;
 
     public ConcurrentQueue<LogEntry> ListOfLogEntries => _listOfLogEntries;
-
-    private LogLevel _logLevelFilter = LogLevel.Information;
 
     /// <summary>
     /// Filter for LogLevel
     /// Only this or higher levels are printed
     /// </summary>
-    public LogLevel LogLevelFilter
-    {
-        get => _logLevelFilter;
-        set
-        {
-            if (_logLevelFilter == value)
-                return;
-            _logLevelFilter = value;
-            Invalidate();
-        }
-    }
+    public LogLevel LogLevelFilter { get; set; } = LogLevel.Information;
 
-    private int _maxNumberOfLogEntriesToKeep = 100;
-
-    public int MaxNumberOfLogEntriesToKeep
-    {
-        get => _maxNumberOfLogEntriesToKeep;
-        set
-        {
-            if (_maxNumberOfLogEntriesToKeep == value)
-                return;
-            _maxNumberOfLogEntriesToKeep = value;
-            Invalidate();
-        }
-    }
-
-    private Color _errorTextColor = Color.Red;
+    public int MaxNumberOfLogEntriesToKeep { get; set; } = 10;
 
     /// <summary>
     /// Color for errors
     /// </summary>
-    public Color ErrorTextColor
-    {
-        get => _errorTextColor;
-        set
-        {
-            if (_errorTextColor == value)
-                return;
-            _errorTextColor = value;
-            Invalidate();
-        }
-    }
-
-    private Color _warningTextColor = Color.Orange;
+    public Color ErrorTextColor { get; set; } = Color.Red;
 
     /// <summary>
     /// Color for warnings
     /// </summary>
-    public Color WarningTextColor
-    {
-        get => _warningTextColor;
-        set
-        {
-            if (_warningTextColor == value)
-                return;
-            _warningTextColor = value;
-            Invalidate();
-        }
-    }
-
-    private Color _informationTextColor = Color.Black;
+    public Color WarningTextColor { get; set; } = Color.DarkOrange;
 
     /// <summary>
     /// Color for information text
     /// </summary>
-    public Color InformationTextColor
-    {
-        get => _informationTextColor;
-        set
-        {
-            if (_informationTextColor == value)
-                return;
-            _informationTextColor = value;
-            Invalidate();
-        }
-    }
+    public Color InformationTextColor { get; set; } = Color.Black;
 
-    private static bool ShouldLog(bool enabled, ShowLoggingInMap showLoggingInMap) =>
-        enabled && showLoggingInMap switch
+    private static bool GetIsActive(bool enabled, ActiveMode activeMode) =>
+        enabled && activeMode switch
         {
-            ShowLoggingInMap.WhenLoggingWidgetIsEnabled => true,
-            ShowLoggingInMap.Never => false,
-            ShowLoggingInMap.WhenLoggingWidgetIsEnabledAndDebuggerIsAttached => System.Diagnostics.Debugger.IsAttached,
-            _ => throw new NotSupportedException(nameof(InfoWidgets.ShowLoggingInMap))
+            ActiveMode.Yes => true,
+            ActiveMode.No => false,
+            ActiveMode.OnlyInDebugMode => System.Diagnostics.Debugger.IsAttached,
+            _ => throw new NotSupportedException(nameof(ActiveMode))
         };
+
+    private string ToString(LogLevel logLevel) => logLevel switch
+    {
+        LogLevel.Error => "ERROR",
+        LogLevel.Warning => "WARN",
+        LogLevel.Information => "INFO",
+        LogLevel.Debug => "DEBUG",
+        LogLevel.Trace => "TRACE",
+        _ => throw new NotSupportedException(nameof(LogLevel))
+    };
 }

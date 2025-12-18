@@ -1,15 +1,17 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0-windows</TargetFrameworks>
+    <TargetFramework>net9.0-windows</TargetFramework>
     <OutputType>WinExe</OutputType>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <UseWpf>true</UseWpf>
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Uncomment the line below to use experimental skia rendering -->
+    <ProjectReference Include="..\..\Mapsui.Experimental.Rendering.Skia\Mapsui.Experimental.Rendering.Skia.csproj" />
     <ProjectReference Include="..\..\Mapsui.UI.Wpf\Mapsui.UI.Wpf.csproj" />
-    <ProjectReference Include="..\..\Tests\Mapsui.Tests.Common\Mapsui.Tests.Common.csproj" />
+    <ProjectReference Include="..\Mapsui.Samples.Common\Mapsui.Samples.Common.csproj" />
   </ItemGroup>
   
   <ItemGroup>

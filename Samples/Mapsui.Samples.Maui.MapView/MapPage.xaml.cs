@@ -1,26 +1,18 @@
-﻿using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
+﻿using System.Diagnostics.CodeAnalysis;
 using Mapsui.Extensions;
 using Mapsui.Logging;
 using Mapsui.Samples.Common;
 using Mapsui.Samples.Common.Extensions;
-using Mapsui.Styles;
 using Mapsui.UI.Maui;
-using Microsoft.Maui.Controls;
-using Microsoft.Maui.Devices.Sensors;
 using Compass = Microsoft.Maui.Devices.Sensors.Compass;
-using Microsoft.Maui.Dispatching;
 using Mapsui.Manipulations;
-using Mapsui.Samples.Common.Maps.Widgets;
 
 namespace Mapsui.Samples.Maui;
 
 public sealed partial class MapPage : ContentPage, IDisposable
 {
     private CancellationTokenSource? _gpsCancelation;
-    public Func<UI.Maui.MapView, MapClickedEventArgs, bool> Clicker { get; set; }
+    public Func<UI.Maui.MapView?, MapClickedEventArgs, bool>? Clicker { get; set; }
 
     public MapPage()
     {
@@ -30,7 +22,7 @@ public sealed partial class MapPage : ContentPage, IDisposable
         ArgumentNullException.ThrowIfNull(info, nameof(info));
     }
 
-    public MapPage(ISampleBase sample, Func<UI.Maui.MapView, MapClickedEventArgs, bool> c = null)
+    public MapPage(ISampleBase sample, Func<UI.Maui.MapView?, MapClickedEventArgs, bool>? c = null)
     {
         InitializeComponent();
 
@@ -45,10 +37,7 @@ public sealed partial class MapPage : ContentPage, IDisposable
 
         Compass.ReadingChanged += Compass_ReadingChanged;
 
-        mapView.MyLocationLayer.UpdateMyLocation(new Mapsui.UI.Maui.Position());
-
-        mapView.Info += MapView_Info;
-        mapView.Renderer.WidgetRenders[typeof(CustomWidget)] = new CustomWidgetSkiaRenderer();
+        mapView.MyLocationLayer.UpdateMyLocation(new Position());
 
         Catch.TaskRun(StartGPS);
 
@@ -76,23 +65,6 @@ public sealed partial class MapPage : ContentPage, IDisposable
         mapView.Refresh();
     }
 
-    private void MapView_Info(object? sender, Mapsui.MapInfoEventArgs? e)
-    {
-        if (e?.MapInfo?.Feature != null)
-        {
-            foreach (var style in e.MapInfo.Feature.Styles)
-            {
-                if (style is CalloutStyle)
-                {
-                    style.Enabled = !style.Enabled;
-                    e.Handled = true;
-                }
-            }
-
-            mapView.RefreshGraphics();
-        }
-    }
-
     private void OnMapClicked(object? sender, MapClickedEventArgs e)
     {
         e.Handled = Clicker?.Invoke(sender as UI.Maui.MapView, e) ?? false;
@@ -104,13 +76,13 @@ public sealed partial class MapPage : ContentPage, IDisposable
     {
         if (e.Pin != null)
         {
-            if (e.TapType == TapType.Double)
+            if (e.GestureType == GestureType.DoubleTap)
             {
                 // Hide Pin when double click
                 //DisplayAlert($"Pin {e.Pin.Label}", $"Is at position {e.Pin.Position}", "Ok");
                 e.Pin.IsVisible = false;
             }
-            if (e.TapType == TapType.Single)
+            if (e.GestureType == GestureType.SingleTap)
                 if (e.Pin.Callout.IsVisible)
                     e.Pin.HideCallout();
                 else

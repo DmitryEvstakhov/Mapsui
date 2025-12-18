@@ -9,9 +9,6 @@ using Mapsui.Styles;
 using Mapsui.Styles.Thematics;
 using Mapsui.Tiling.Layers;
 
-#pragma warning disable IDISP001 // Dispose created
-#pragma warning disable IDISP004 // Don't ignore created IDisposable
-
 namespace Mapsui.Samples.Common.Maps.Special;
 
 public class ShapefileTilingFilteringSample : ISample
@@ -22,7 +19,7 @@ public class ShapefileTilingFilteringSample : ISample
         ShapeFilesDeployer.CopyEmbeddedResourceToFile("cities.shp");
     }
 
-    public string Name => "Filtering on shapefile";
+    public string Name => "FilteringOnShapefile";
     public string Category => "Special";
 
     public Task<Map> CreateMapAsync() => Task.FromResult(CreateMap());
@@ -101,8 +98,8 @@ public class ShapefileTilingFilteringSample : ISample
         // Cities below 1.000.000 gets the smallest symbol.
         // Cities with more than 5.000.000 the largest symbol.
         var imageSource = "embedded://Mapsui.Samples.Common.Images.icon.png";
-        var cityMin = new SymbolStyle { ImageSource = imageSource, SymbolScale = 0.5f };
-        var cityMax = new SymbolStyle { ImageSource = imageSource, SymbolScale = 1f };
+        var cityMin = new ImageStyle { Image = imageSource, SymbolScale = 0.5f };
+        var cityMax = new ImageStyle { Image = imageSource, SymbolScale = 1f };
         return new GradientTheme("POPULATION", 1000000, 5000000, cityMin, cityMax);
     }
 
